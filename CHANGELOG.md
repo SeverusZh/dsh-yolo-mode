@@ -2,6 +2,14 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.4.0] - 2026-08-14
+
+### 新增
+
+- **模型下拉选择**：设置页的 judge `provider` / `model` 改为下拉框，选项来自 Harness 模型配置（`connection.api.llm`），切换 provider 联动清空 model。
+- **每预设默认裁判提示词**：`defaultJudgePromptFor(preset)` 为六预设提供默认裁判提示词（strict 最保守、balanced 通用、permissive 宽松、custom 按层级表），`judge.systemPrompt` 留空时自动选用。
+- **预设预填充**：切换预设时自动把该预设的默认提示词与层级表填入 `systemPrompt` / `levels`（选 `custom` 留空）；`statusView` 返回 `presetDefaults`。
+
 ## [0.3.0] - 2026-08-14
 
 ### 变更（UI 重做，对齐 dsh-plugin-subagent-director 参考架构）

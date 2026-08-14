@@ -1,43 +1,39 @@
 # dsh-yolo-mode
 
-`dsh-yolo-mode` 是一个 DeepSeek Harness (DSH) 宿主侧插件：当会话处于可写沙箱模式、且当前审批策略为 `ask` 时，使用大模型（LLM）自动裁决沙箱**升权申请**（`escalate sandbox to <targetMode>: <justification>`），并根据用户选择的预设 / 自定义层级决定是「放行 / 拒绝 / 转人工」。它不改变 DSH 既有的沙箱模式与审批策略词汇表，仅在 `ask` 策略下作为审批应答者介入。**任何不确定或失败路径都不放行（fail-closed）。**
+> DeepSeek Harness 插件：用大模型自动裁决沙箱**升权申请**（LLM-powered auto-approval）。
 
-> 版本：v0.3.0 ｜ 详见 [CHANGELOG.md](CHANGELOG.md)。双面包：宿主审批应答 + 独立 settings 桥接条目 + 客户端 UI（状态 chip、统计面板、设置页）。
+当会话处于可写沙箱模式、审批策略为 `ask` 时，`dsh-yolo-mode` 拦截 `escalate sandbox to ...` 升权申请，按你选择的**预设**或**自定义权限层级**由大模型裁决「放行 / 拒绝 / 转人工」。任何不确定或失败路径都不会放行（**fail-closed**）。
+
+[![npm version](https://img.shields.io/npm/v/dsh-yolo-mode)](https://www.npmjs.com/package/dsh-yolo-mode)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ---
 
-## 〇、界面（v0.3.0）
+## 功能特性
 
-- **输入栏状态 chip**：会话输入栏左侧显示 `YOLO <preset>`，点击弹出统计面板（总审批 / 放行 / 拒绝 / 转人工 + 最近 20 条决策）。
-- **设置页**：设置面板新增「YOLO 审批」页，可在线修改预设、生效沙箱模式、judge 参数与 levels 层级（JSON），保存后**即时生效**（持久化到 settings.yaml，经 `/yolo-mode` 设置桥）。
-- 配置分层：`resolved = schema 默认 + base(插件行 config) + 用户层(设置页)`。
-- **升级/安装后请重启 DSH 并刷新浏览器**（已挂载插件行的模块代码更新需重启才能重新导入）。
+- **LLM 自动裁决**：在 `workspace-write` 会话中，对 `danger-full-access` / `workspace-write` 升权申请调用大模型分级（`allow / deny / unsure`），确定时免去人工弹窗。
+- **内置预设**：`off` / `strict` / `balanced`（默认）/ `permissive` / `yolo` / `custom`，覆盖从「全部转人工」到「确定性全放行」的完整光谱。
+- **自定义层级**：`levels` 支持逐目标模式、逐工具（`tools.<toolName>`）的 `allow / judge / delegate / deny` 策略，及 `error` / `unsure` 回退。
+- **每预设默认提示词**：`judge.systemPrompt` 留空时按预设自动选用对应裁判提示词（strict 最保守、permissive 宽松、custom 按层级表）。
+- **图形化配置**：设置面板「YOLO 审批」页在线修改预设 / 生效模式 / 裁判模型（下拉选择）/ 层级表，保存即生效；输入栏状态 chip + 决策统计面板。
+- **完整审计**：每次裁决落 JSONL 日志，含工具、目标模式、当前模式、理由、决策与结果。
+- **fail-closed**：超时、非法输出、模型不可用、并发溢出等一切异常路径都回退为「拒绝」或「转人工」。
 
-## 一、功能简介
+## 安装
 
-- 拦截 `approval/request` seam，仅对形如 `escalate sandbox to workspace-write|danger-full-access: ...` 的升权申请介入，其余请求透明委托给后续应答者（如人工 Web 审批 UI）。
-- 前置门槛：`ctx.sandboxPolicy.resolve({session})` 得到会话**当前有效沙箱模式**，仅当该模式在本插件的 `modes` 列表内才参与裁决（默认 `['workspace-write']`）。
-- 依据 `preset` / `levels` 决定每个请求的处置策略（`allow | judge | delegate | deny`）。
-- `judge` 路径调用 LLM 裁判，输出 `{"decision":"allow|deny|unsure","reason":"..."}`；裁判失败 / 超时 / 非法输出时按预设回退（拒绝或转人工），**绝不自动放行**。
-- 每次裁决均写入 JSONL 审计日志（`ctx.logger` + 文件，默认 `%TEMP%/dsh-yolo/judge.log`）。
-
-## 二、安装
-
-需要两步：先用 `dsh plugin` 安装本包，再把它作为一行插入到目标 profile 的 `cordis.patch.yml`。
-
-### 步骤 1：安装插件包
-
-在 DSH 宿主环境中，向目标 profile（例如 `web`）注册本包。安装指向**项目绝对路径**：
+### 1. 安装插件包
 
 ```bash
+# 从 npm
+dsh plugin --profile web add dsh-yolo-mode
+
+# 或从本地路径
 dsh plugin --profile web add <项目绝对路径>
 ```
 
-> `dsh plugin --profile <name> add <pkg>` 转发 pnpm，支持本地路径 / link。
+### 2. 追加两行到 profile patch
 
-### 步骤 2：追加两行到 profile patch（主条目 + 桥接条目）
-
-编辑 `$DSH_HOME/profiles/web/cordis.patch.yml`（`$DSH_HOME` 通常为 `C:\Users\<user>\.dsh`），在顶层 YAML 数组中追加两个 `insert` 元素：
+编辑 `$DSH_HOME/profiles/web/cordis.patch.yml`，追加两个 `insert` 元素（主条目 + 设置桥接条目）：
 
 ```yaml
 - insert:
@@ -53,109 +49,82 @@ dsh plugin --profile web add <项目绝对路径>
       name: dsh-yolo-mode/bridge
 ```
 
-主条目 `yolo-mode` 是审批应答者；桥接条目 `yolo-mode-bridge`（`inject: ['webServer','settings']`）自发布 `/yolo-mode` 设置桥——宿主 webServer 只能经 `inject` 取得，树外插件无法用 `ctx.get('webServer')` 拿到，故必须拆成独立条目。
+重启 DSH 并刷新浏览器后生效。
 
-`insert` 仅追加到组合末尾；由于人工应答者在 bundle 层先注册，本插件在内部以 `ctx.on('approval/request', handler, { prepend: true })` 抢占监听列表头，确保轮到自己先裁决。
+## 配置
 
-profile 的 `cordis.patch.yml` 由 `watchUserPatches` **热重载**：保存后新行即挂入运行中的宿主组合（实测无需重启即可 ACTIVE；若加载失败，宿主保留上一棵好树并记录 `hmr/config-update-failed`）。重启 DSH 始终是最稳妥的兜底方式。
-
-## 三、配置参考表
-
-插件行的 `config` 全字段可选，未填字段按下列默认值手工合并（手工合并，不引入 schemastery；非法值将导致插件加载失败，fail-loud）。
+插件行 `config` 全字段可选，未填按默认值：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `preset` | `'off'\|'strict'\|'balanced'\|'permissive'\|'yolo'\|'custom'` | `balanced` | 使用的内置预设；`custom` 时以 `levels` 为准，见预设表。 |
-| `modes` | `string[]` | `['workspace-write']` | 会话有效沙箱模式 ∈ 此列表时才介入；只读会话默认不介入。合法项：`read-only`、`workspace-write`、`danger-full-access`。 |
-| `levels` | `object` | `{}` | `preset=custom` 时的层级表；`levels.tools.<toolName>` 可对**任意预设**逐工具覆盖（见后文「权限层级」）。 |
-| `judge.provider` | `string` | `''` | 启用 LLM 裁判所必需；空串视为未配置，`judge` 决策一律按错误回退。 |
-| `judge.model` | `string` | `''` | LLM 裁判所用模型；与 `provider` 同非空才创建裁判实例。 |
-| `judge.systemPrompt` | `string` | `''` | 裁判 system prompt；空 = 内置安全审计者 prompt。 |
-| `judge.timeoutMs` | `number` | `20000` | 裁判单次调用超时（毫秒），必须是正整数。 |
-| `judge.maxTokens` | `number` | `256` | 裁判输出最大 token 数，必须是正整数。 |
-| `judge.concurrency` | `number` | `2` | 并发裁判信号量上限，超出则抛出 `OVERLOAD` → 按错误回退；必须是正整数。 |
-| `includeSubagents` | `boolean` | `true` | 子代理会话是否同样裁决；为 `false` 时子代理请求转人工（审计仍记录 `origin`）。 |
-| `auditFile` | `string` | `''` | 审计 JSONL 文件绝对路径；空 = 使用默认 `%TEMP%/dsh-yolo/judge.log`。 |
+| `preset` | `off\|strict\|balanced\|permissive\|yolo\|custom` | `balanced` | 使用的预设；`custom` 时以 `levels` 为准 |
+| `modes` | `string[]` | `['workspace-write']` | 会话有效沙箱模式 ∈ 此列表时才介入（`read-only` / `workspace-write` / `danger-full-access`） |
+| `levels` | `object` | `{}` | 权限层级表；`levels.tools.<toolName>` 对任意预设逐工具覆盖 |
+| `judge.provider` | `string` | `''` | 裁判模型 provider；空 = 未配置（judge 决策按错误回退） |
+| `judge.model` | `string` | `''` | 裁判模型；与 provider 同非空才启用裁判 |
+| `judge.systemPrompt` | `string` | `''` | 裁判 system prompt；空 = 按预设取默认 |
+| `judge.timeoutMs` | `number` | `20000` | 单次裁判超时（毫秒） |
+| `judge.maxTokens` | `number` | `256` | 裁判输出最大 token 数 |
+| `judge.concurrency` | `number` | `2` | 并发裁判上限，溢出按错误回退 |
+| `includeSubagents` | `boolean` | `true` | 子代理会话是否同样裁决 |
+| `auditFile` | `string` | `''` | 审计日志路径；空 = `%TEMP%/dsh-yolo/judge.log` |
 
 ### 权限层级（`levels`）
-
-`levels` 形如（`workspace-write` / `danger-full-access` / `error` / `unsure` 行仅在 `preset=custom` 时生效；`levels.tools` 对任意预设生效）：
 
 ```yaml
 levels:
   workspace-write: judge        # 目标模式 → 策略
   danger-full-access: judge
-  error: delegate               # 裁判错误回退（custom 时生效）
-  unsure: delegate              # 裁判不确定回退（custom 时生效）
+  error: delegate               # 裁判错误回退
+  unsure: delegate              # 裁判不确定回退
   tools:
     pwsh: delegate              # 逐工具覆盖，优先级最高
     write: allow
 ```
 
-- `policy ∈ allow | judge | delegate | deny`。
-- `resolvePolicy` 优先级（高 → 低）：`levels.tools[toolName]` → 基础行（`preset=custom` 时为 `levels[targetMode]`，缺省 `delegate`；其余预设为内置预设表）。
+策略取值 `allow | judge | delegate | deny`；优先级：`levels.tools[toolName]` → 基础行（`custom` 时为 `levels[targetMode]`，其余预设为内置表）。
 
-## 四、预设表
+## 预设
 
-内置六种预设。`off` / `permissive` / `yolo` 不产生 LLM 调用（`yolo` 确定性全放行，`off` 全部转人工）。
-
-| 预设 | `workspace-write` | `danger-full-access` | 裁判失败回退（error） | 裁判不确定回退（unsure） | 说明 |
+| 预设 | `workspace-write` | `danger-full-access` | 失败回退 | 不确定回退 | 说明 |
 |---|---|---|---|---|---|
-| `off` | delegate | delegate | delegate | delegate | 不介入，全部转人工。 |
-| `strict` 严格 | judge | delegate | rejected | delegate | 仅裁决 `workspace-write` 目标；`danger-full-access` 恒转人工；裁判错误 → 拒绝。 |
-| `balanced` 均衡（默认） | judge | judge | delegate | delegate | 裁决全部升级目标；失败 / 不确定 → 转人工。 |
-| `permissive` 宽松 | judge | judge | delegate | **allowed-once** | 裁决全部目标；**不确定视为允许**（文档警示，慎用）。 |
-| `yolo` | allow | allow | —（放行） | —（放行） | 确定性全部放行，零 LLM 调用。 |
-| `custom` | 依 `levels` | 依 `levels` | 依 `levels.error` | 依 `levels.unsure` | 全字段开放；缺省回退 `delegate`。 |
+| `off` | delegate | delegate | delegate | delegate | 不介入，全部转人工 |
+| `strict` 严格 | judge | delegate | rejected | delegate | 仅裁决 `workspace-write`；`danger-full-access` 恒转人工 |
+| `balanced` 均衡（默认） | judge | judge | delegate | delegate | 裁决全部升级目标；失败 / 不确定转人工 |
+| `permissive` 宽松 | judge | judge | delegate | **allowed-once** | 裁决全部目标；不确定视为允许（慎用） |
+| `yolo` | allow | allow | — | — | 确定性全放行，零 LLM 调用 |
+| `custom` | 依 `levels` | 依 `levels` | 依 `levels.error` | 依 `levels.unsure` | 全字段开放 |
 
-裁决词汇：`allow → allowed-once`（放行）、`deny → rejected`（拒绝）、`delegate → next()`（转人工 / 委托后续应答者）。`judgeFallback` 返回值域为 `allowed-once | rejected | delegate`：`strict+error → rejected`；`permissive+unsure → allowed-once`（文档警示）；其余组合 `→ delegate`；`custom` 读 `levels.error` / `levels.unsure`。
+每预设默认裁判提示词（`judge.systemPrompt` 留空时自动选用）：
 
-### 每预设默认裁判提示词（v0.4.0）
-
-`judge.systemPrompt` 留空时，按当前预设自动选用对应的默认裁判提示词；显式填写则优先。各预设默认裁判立场：
-
-| 预设 | 默认裁判提示词要点 |
+| 预设 | 默认裁判立场 |
 |---|---|
-| `off` / `yolo` | 不调用裁判（确定性转人工 / 全放行），无提示词 |
-| `strict` 严格 | 最保守审计者：`danger-full-access` 一律拒绝；仅"最小作用范围 `workspace-write` + 理由极充分"才允许；存疑即 deny/unsure |
-| `balanced` 均衡（默认） | 通用审计者：只依据事实、防回环、存疑即 deny/unsure |
-| `permissive` 宽松 | 宽松审计者：理由合理且作用范围可接受即倾向 allow，仅明显破坏性/供应链风险拒绝（保留存疑底线） |
-| `custom` | 按用户层级表裁决：对照 `levels` 中该工具+目标模式策略按其倾向，存疑按 `levels.error`/`levels.unsure` 回退 |
+| `off` / `yolo` | 不调用裁判 |
+| `strict` | 最保守：`danger-full-access` 一律拒绝；仅最小范围 `workspace-write` 且理由极充分才允许 |
+| `balanced` | 通用审计：只依据事实、防回环、存疑即 deny/unsure |
+| `permissive` | 宽松：理由合理且范围可接受即倾向允许，仅明显破坏性 / 供应链风险拒绝 |
+| `custom` | 按 `levels` 层级表裁决，存疑按 `levels.error` / `levels.unsure` 回退 |
 
-## 五、安全须知
+## 界面
 
-- **fail-closed**：任何错误、超时、非 JSON、工具块、信号量溢出路径都不会放行；只有明确得到 `allow` 才返回一次性 `allowed-once`。
-- **防回环**：裁判 prompt 与 agent 上下文隔离；prompt 强调「你不是发起方 agent，只依据事实裁决；存疑即 deny/unsure；绝不因发起方的目标 / 意图放行」，防止模型借 Web 审批回环自批准 `danger-full-access`（DSH 上游已关注的 #250 类问题）。
-- **绝不改写策略**：本插件不改变 DSH 的 `sandbox` / `approval` 策略词汇，也不改写任何审批策略，仅在 `ask` 下作为应答者；`never` 策略下 seam 在瀑布前直接拒绝，插件天然无请求可接。
-- **默认预设非宽松**：默认预设为 `balanced`（不确定 → 转人工），不默认使用 `permissive` / `yolo`。
-- **`permissive` 与 `yolo` 警示**：`permissive` 会把裁判「不确定」视为允许，`yolo` 直接全部放行，二者都会显著放大风险，仅建议在可信环境下使用。
-- **审计日志**：每次裁决追加一行 JSONL 到 `auditFile`（默认 `%TEMP%/dsh-yolo/judge.log`），含 `{time, sessionId, origin, toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason?}`。请定期检查；生产环境建议配置到持久化路径。
+- **输入栏 chip**：显示 `YOLO <preset>`，点击弹出统计面板（总审批 / 放行 / 拒绝 / 转人工 + 最近 20 条决策）。
+- **设置页**：「YOLO 审批」页在线修改预设、生效沙箱模式、裁判模型（provider / model 下拉，取自 Harness 模型配置）、层级表（JSON）；切换预设时自动预填充该预设的默认提示词与层级表。
 
-## 六、文件结构
+## 安全
 
-```
-dsh-yolo-mode/
-├── package.json            # name dsh-yolo-mode, v0.1.0, type: module, main: lib/index.js
-├── README.md               # 本文档
-├── CHANGELOG.md            # 版本变更
-├── LICENSE                 # MIT
-├── .gitignore
-├── docs/                   # 需求与设计 / 调研文档
-├── lib/
-│   ├── policy.js           # 纯函数策略层（零依赖、可单测）
-│   ├── judge.js            # LLM 裁判封装（依赖 peer：dsh-llm / dsh-timeout）
-│   └── index.js            # 插件胶水（默认导出）
-└── test/
-    ├── policy.test.mjs     # node --test
-    └── judge.test.mjs      # node --test（假 llm，不发真实网络）
-```
+- **fail-closed**：只有明确得到 `allow` 才返回一次性 `allowed-once`；其余一切路径拒绝或转人工。
+- **防回环**：裁判 prompt 与 agent 上下文隔离，防止模型借 Web 审批回环自批准 `danger-full-access`。
+- **不改写策略**：仅在 `ask` 策略下作为应答者，不改变 DSH 的沙箱 / 审批词汇。
+- **默认保守**：默认预设 `balanced`（不确定转人工），不默认启用 `permissive` / `yolo`。
+- **审计**：每次裁决落一行 JSONL，含 `{time, sessionId, origin, toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason?}`。
 
-## 七、开发
+## 开发
 
 ```bash
-npm test    # node --test 全量测试（自动发现 test/*.test.mjs），全绿为验收
+npm test        # node --test 全量测试
+npm run build   # 构建客户端 bundle（rolldown）
 ```
 
-> 测试运行需要能解析 peer 依赖 `@deepseek-ai/dsh-llm` 与 `@deepseek-ai/dsh-timeout`（如将 DSH checkout 的 `node_modules/@deepseek-ai` 链接到本项目的 `node_modules/`，或由 profile 的 pnpm 安装解析）。
+## 许可
 
-> 「yolo」语义致敬 OpenCode 的 `--yolo` 一键全自动模式；本实现更克制——仅作为可选的宽松预设存在，默认不启用。
+[MIT](LICENSE)
