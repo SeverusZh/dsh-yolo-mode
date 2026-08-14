@@ -203,4 +203,4 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 1. `dsh plugin --profile web add <workspace 绝对路径>`（写 profile 目录，pnpm 安装 link）。
 2. 向 `$DSH_HOME/profiles/web/cordis.patch.yml` 追加 `insert` 行（见 §0 表；id `yolo-mode`、name `dsh-yolo-mode`、config 示例 preset `balanced`）。
 3. `dsh web --dump-config` 离线校验组合。
-4. 重启 DSH（需用户操作）后做真实升权 E2E：裁判放行 / 转人工 / 失败回退三条路径。
+4. `cordis.patch.yml` 由 `watchUserPatches` 热重载，新行保存后即挂入运行中的宿主（2026-08-14 实测：`include:yolo-mode` fiber state=ACTIVE、error=null，无需重启）；若加载失败宿主保留上一棵好树。重启 DSH 始终是兜底。E2E：在 `workspace-write + ask` 的新会话触发真实升权，验证裁判放行 / 转人工 / 失败回退三条路径。

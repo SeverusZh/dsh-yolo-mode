@@ -42,7 +42,7 @@ dsh plugin --profile web add <项目绝对路径>
 
 `insert` 仅追加到组合末尾；由于人工应答者在 bundle 层先注册，本插件在内部以 `ctx.on('approval/request', handler, { prepend: true })` 抢占监听列表头，确保轮到自己先裁决。
 
-随后重启 DSH 使组合生效（本进程即被修改的宿主进程，需由用户手动重启）。
+profile 的 `cordis.patch.yml` 由 `watchUserPatches` **热重载**：保存后新行即挂入运行中的宿主组合（实测无需重启即可 ACTIVE；若加载失败，宿主保留上一棵好树并记录 `hmr/config-update-failed`）。重启 DSH 始终是最稳妥的兜底方式。
 
 ## 三、配置参考表
 
