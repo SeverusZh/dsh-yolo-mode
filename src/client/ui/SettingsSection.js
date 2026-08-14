@@ -4,7 +4,7 @@
  * store.mutate with an optimistic-revision lock. Everything is React.createElement
  * + inline styles (no JSX, no CSS modules).
  */
-import { useState, createElement as h } from 'react';
+import { useEffect, useState, createElement as h } from 'react';
 import {
   presetOps,
   modesOps,
@@ -50,38 +50,38 @@ function serializeLevels(levels, t) {
 /** Styles (inline). */
 const styles = {
   root: { display: 'flex', flexDirection: 'column', gap: 12 },
-  intro: { margin: 0, color: '#8a8f98', fontSize: 13, lineHeight: '18px' },
+  intro: { margin: 0, color: '#6b7280', fontSize: 13, lineHeight: '18px' },
   card: {
-    border: '1px solid #333', borderRadius: 10, padding: 12,
-    display: 'flex', flexDirection: 'column', gap: 10, backgroundColor: '#1a1c20',
+    border: '1px solid #e5e7eb', borderRadius: 10, padding: 12,
+    display: 'flex', flexDirection: 'column', gap: 10, backgroundColor: '#f8fafc',
   },
   row: { display: 'flex', flexDirection: 'column', gap: 4 },
-  fieldLabel: { color: '#c9cdd4', fontSize: 12 },
+  fieldLabel: { color: '#374151', fontSize: 12 },
   select: {
-    backgroundColor: '#14161a', color: '#e6e8eb', border: '1px solid #3a3d43',
+    backgroundColor: '#ffffff', color: '#111827', border: '1px solid #cbd5e1',
     borderRadius: 6, padding: '6px 8px', fontSize: 13,
   },
   input: {
-    backgroundColor: '#14161a', color: '#e6e8eb', border: '1px solid #3a3d43',
+    backgroundColor: '#ffffff', color: '#111827', border: '1px solid #cbd5e1',
     borderRadius: 6, padding: '6px 8px', fontSize: 13, width: '100%', boxSizing: 'border-box',
   },
   textarea: {
-    backgroundColor: '#14161a', color: '#e6e8eb', border: '1px solid #3a3d43',
+    backgroundColor: '#ffffff', color: '#111827', border: '1px solid #cbd5e1',
     borderRadius: 6, padding: '6px 8px', fontSize: 13, width: '100%',
     boxSizing: 'border-box', minHeight: 90, fontFamily: 'monospace',
   },
   modesRow: { display: 'flex', flexDirection: 'column', gap: 6 },
-  modeLabel: { display: 'flex', alignItems: 'center', gap: 6, color: '#c9cdd4', fontSize: 13 },
+  modeLabel: { display: 'flex', alignItems: 'center', gap: 6, color: '#374151', fontSize: 13 },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 },
   primaryButton: {
-    backgroundColor: '#2f6feb', color: '#fff', border: 'none', borderRadius: 6,
+    backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: 6,
     padding: '6px 14px', fontSize: 13, cursor: 'pointer',
   },
   primaryDisabled: { opacity: 0.5, cursor: 'not-allowed' },
   hint: { margin: 0, color: '#6b7280', fontSize: 11 },
   result: { fontSize: 12, lineHeight: '16px' },
-  resultOk: { color: '#34c759' },
-  resultErr: { color: '#ff453a' },
+  resultOk: { color: '#16a34a' },
+  resultErr: { color: '#dc2626' },
 };
 
 /**
@@ -98,6 +98,12 @@ export function SettingsSection(props) {
 
 function ReactSection({ store, useSnapshot, t, close }) {
   const state = useSnapshot((s) => s);
+  // Kick the first load once when the settings page mounts: the store starts
+  // idle, so without this the page would stay stuck on the intro text until a
+  // pushed invalidation arrives. load() is idempotent/generation-guarded.
+  useEffect(() => {
+    void store.load();
+  }, [store]);
   const view = state.view;
   const draft = draftFromView(view, t);
   const [local, setLocal] = useState(draft);

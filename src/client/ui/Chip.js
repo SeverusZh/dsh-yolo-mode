@@ -2,7 +2,7 @@
  * YOLO mode status chip (slot `conversation.input.left`). Shows "YOLO <preset>"
  * and toggles the shared popup via store.togglePopup().
  */
-import { createElement as h } from 'react';
+import { useEffect, createElement as h } from 'react';
 
 const chipStyle = {
   display: 'inline-flex',
@@ -10,9 +10,9 @@ const chipStyle = {
   gap: 6,
   padding: '4px 10px',
   borderRadius: 999,
-  backgroundColor: '#1f2330',
-  color: '#e6e8eb',
-  border: '1px solid #3a3d43',
+  backgroundColor: '#ffffff',
+  color: '#1d4ed8',
+  border: '1px solid #93c5fd',
   fontSize: 12,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
@@ -22,7 +22,7 @@ const chipStyle = {
 /** Status colour for the leading dot based on judge readiness. */
 function dotColor(statusInfo) {
   const configured = statusInfo && statusInfo.judgeConfigured;
-  return configured ? '#34c759' : '#ff9f0a';
+  return configured ? '#16a34a' : '#d97706';
 }
 
 /**
@@ -32,6 +32,16 @@ export function Chip(props) {
   const store = props.store;
   const useSnapshot = props.useSnapshot;
   if (store === undefined || useSnapshot === undefined) return null;
+  return ChipLoaded({ store, useSnapshot });
+}
+
+function ChipLoaded({ store, useSnapshot }) {
+  // Kick the initial load once on mount: the store starts idle, so without
+  // this the chip would stay on "YOLO …" until a pushed invalidation arrives.
+  // load() is idempotent and generation-guarded, so later mounts are harmless.
+  useEffect(() => {
+    void store.load();
+  }, [store]);
   const state = useSnapshot((s) => s);
   const statusInfo = state.statusInfo;
   const preset = statusInfo && typeof statusInfo.preset === 'string' ? statusInfo.preset : '…';
