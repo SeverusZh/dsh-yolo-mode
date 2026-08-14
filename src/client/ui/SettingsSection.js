@@ -3,6 +3,12 @@
  * configuration (view.value) into a form and saves via path ops through
  * store.mutate with an optimistic-revision lock. Everything is React.createElement
  * + inline styles (no JSX, no CSS modules).
+ *
+ * Draft-sync pattern mirrors the reference DefaultModelRow
+ * (dsh-subagents-options): the draft initializes once from the view and is
+ * re-seeded only by a useEffect on the exact leaf values we edit, skipped while
+ * a save is in flight. No render-time patching, so a mid-edit is never
+ * clobbered and a save always reflects the server truth afterwards.
  */
 import { useEffect, useState, createElement as h } from 'react';
 import {
@@ -105,50 +111,70 @@ function ReactSection({ store, useSnapshot, t, close }) {
     void store.load();
   }, [store]);
   const view = state.view;
-  const draft = draftFromView(view, t);
-  const [local, setLocal] = useState(draft);
+  const writable = state.writable;
+
+  const [draft, setDraft] = useState(() => draftFromView(view, t));
   const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState(undefined);
+  const [done, setDone] = useState(false);
 
   // Reflect a fresh server snapshot into the draft (a reload or pushed
-  // invalidation). Rebuilt from the CURRENT view each render; we only push it
-  // into local state when not busy so a mid-edit is not clobbered.
-  // (Kept intentionally simple: the section re-inits from the snapshot on load.)
-  if (!busy && !pending && !draftsEqual(draftFromView(view, t), local)) {
-    setLocal(draftFromView(view, t));
-  }
+  // invalidation). Re-seed only from the leaf values we edit, and skip while a
+  // save is in flight so a mid-edit is never clobbered.
+  useEffect(() => {
+    if (busy) return;
+    setDraft(draftFromView(view, t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    view?.value?.preset,
+    view?.value?.modes,
+    view?.value?.levels,
+    view?.value?.judge?.provider,
+    view?.value?.judge?.model,
+    view?.value?.judge?.systemPrompt,
+    view?.value?.judge?.timeoutMs,
+    view?.value?.judge?.maxTokens,
+    view?.value?.judge?.concurrency,
+  ]);
 
-  const levelsParse = parseLevels(local.levels);
+  const levelsParse = parseLevels(draft.levels);
+  const levelsInvalid = !levelsParse.ok && trimToNull(draft.levels) != null;
 
-  const canSave =
-    state.status === 'ready' &&
-    !busy &&
-    (levelsParse.ok || trimToNull(local.levels) == null);
+  /** Map a store.mutate failure outcome to a user-facing message. */
+  const kindMessage = (out) => {
+    if (out.kind === 'conflict') return t('conflict');
+    if (out.kind === 'rejected') return t('rejected');
+    return t('fatal');
+  };
 
-  const onSave = async () => {
+  const save = async () => {
     setBusy(true);
-    setPending(false);
+    setFailure(undefined);
+    setDone(false);
     try {
-      const ops = buildOps(view, local, t);
-      const outcome = await store.mutate(ops);
-      if (!outcome.ok) {
-        setPending('error:' + (outcome.kind || 'fatal'));
-      } else {
-        setPending('ok');
-      }
+      const ops = buildOps(view, draft, t);
+      const out = await store.mutate(ops);
+      if (!out.ok) setFailure(kindMessage(out));
+      else setDone(true);
     } finally {
       setBusy(false);
     }
   };
 
   const toggleMode = (id) => {
-    const next = local.modes.includes(id)
-      ? local.modes.filter((m) => m !== id)
-      : local.modes.concat([id]);
-    setLocal(Object.assign({}, local, { modes: next }));
+    const next = draft.modes.includes(id)
+      ? draft.modes.filter((m) => m !== id)
+      : draft.modes.concat([id]);
+    setDraft(Object.assign({}, draft, { modes: next }));
+    setDone(false);
+    setFailure(undefined);
   };
 
-  const setField = (name, value) => setLocal(Object.assign({}, local, { [name]: value }));
+  const setField = (name, value) => {
+    setDraft(Object.assign({}, draft, { [name]: value }));
+    setDone(false);
+    setFailure(undefined);
+  };
 
   if (state.status === 'error') {
     return h('div', { style: styles.root },
@@ -168,7 +194,7 @@ function ReactSection({ store, useSnapshot, t, close }) {
         h('label', { style: styles.fieldLabel }, t('preset')),
         h('select', {
           style: styles.select,
-          value: local.preset,
+          value: draft.preset,
           onChange: (e) => setField('preset', e.target.value),
         },
           PRESETS.map((p) => h('option', { key: p, value: p }, p))),
@@ -179,24 +205,24 @@ function ReactSection({ store, useSnapshot, t, close }) {
         MODE_OPTIONS.map((m) => h('label', { key: m.id, style: styles.modeLabel },
           h('input', {
             type: 'checkbox',
-            checked: local.modes.includes(m.id),
+            checked: draft.modes.includes(m.id),
             onChange: () => toggleMode(m.id),
           }),
           t(m.key))),
         h('p', { style: styles.hint }, t('modesHint'))),
 
       h('div', { style: styles.grid },
-        fieldInput(styles, t, local, setField, 'judgeProvider', 'provider'),
-        fieldInput(styles, t, local, setField, 'judgeModel', 'model'),
-        fieldInput(styles, t, local, setField, 'judgeTimeoutMs', 'timeoutMs'),
-        fieldInput(styles, t, local, setField, 'judgeMaxTokens', 'maxTokens'),
-        fieldInput(styles, t, local, setField, 'judgeConcurrency', 'concurrency'),
+        fieldInput(styles, t, draft, setField, 'judgeProvider', 'provider'),
+        fieldInput(styles, t, draft, setField, 'judgeModel', 'model'),
+        fieldInput(styles, t, draft, setField, 'judgeTimeoutMs', 'timeoutMs'),
+        fieldInput(styles, t, draft, setField, 'judgeMaxTokens', 'maxTokens'),
+        fieldInput(styles, t, draft, setField, 'judgeConcurrency', 'concurrency'),
       ),
       h('div', { style: styles.row },
         h('label', { style: styles.fieldLabel }, t('systemPrompt')),
         h('textarea', {
           style: styles.textarea,
-          value: local.judgeSystemPrompt,
+          value: draft.judgeSystemPrompt,
           onChange: (e) => setField('judgeSystemPrompt', e.target.value),
         })),
 
@@ -204,29 +230,24 @@ function ReactSection({ store, useSnapshot, t, close }) {
         h('label', { style: styles.fieldLabel }, t('levels') + ' · ' + t('levelsHint')),
         h('textarea', {
           style: styles.textarea,
-          value: local.levels,
+          value: draft.levels,
           onChange: (e) => setField('levels', e.target.value),
         }),
-        parseLevels(local.levels).ok || trimToNull(local.levels) == null
-          ? null
-          : h('p', { style: Object.assign({}, styles.result, styles.resultErr) }, t('invalidLevelsJson'))),
+        levelsInvalid
+          ? h('p', { style: Object.assign({}, styles.result, styles.resultErr) }, t('invalidLevelsJson'))
+          : null),
 
-      pending === 'ok'
-        ? h('p', { style: Object.assign({}, styles.result, styles.resultOk) }, t('saved'))
-        : pending !== null && pending === 'error:conflict'
-          ? h('p', { style: Object.assign({}, styles.result, styles.resultErr) }, t('conflict'))
-          : pending !== null && pending === 'error:rejected'
-            ? h('p', { style: Object.assign({}, styles.result, styles.resultErr) }, t('rejected'))
-            : pending === 'error:fatal'
-              ? h('p', { style: Object.assign({}, styles.result, styles.resultErr) }, t('fatal'))
-              : null,
-
-      h('div', { style: { display: 'flex', gap: 8 } },
+      h('div', { style: { display: 'flex', gap: 8, alignItems: 'center' } },
         h('button', {
-          style: Object.assign({}, styles.primaryButton, canSave ? {} : styles.primaryDisabled),
-          disabled: !canSave,
-          onClick: () => void onSave(),
+          style: Object.assign({}, styles.primaryButton, !writable || busy || levelsInvalid ? styles.primaryDisabled : {}),
+          disabled: !writable || busy || levelsInvalid,
+          onClick: () => void save(),
         }, t('save')),
+        done
+          ? h('span', { style: Object.assign({}, styles.result, styles.resultOk) }, t('saved'))
+          : failure !== undefined
+            ? h('span', { style: Object.assign({}, styles.result, styles.resultErr) }, failure)
+            : null,
         close !== undefined
           ? h('button', { style: styles.primaryButton, onClick: () => close() }, t('close'))
           : null,
@@ -235,16 +256,12 @@ function ReactSection({ store, useSnapshot, t, close }) {
   );
 }
 
-function draftsEqual(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function fieldInput(styles, t, local, setField, name, labelKey) {
+function fieldInput(styles, t, draft, setField, name, labelKey) {
   return h('div', { style: styles.row },
     h('label', { style: styles.fieldLabel }, t(labelKey)),
     h('input', {
       style: styles.input,
-      value: local[name],
+      value: draft[name],
       onChange: (e) => setField(name, e.target.value),
     }));
 }
@@ -271,17 +288,17 @@ function trimToNull(text) {
  * numbers (blank → unset); text judge fields judgeField-shaped; modes/levels
  * set whole.
  */
-function buildOps(view, local, t) {
+function buildOps(view, draft, t) {
   const value = view && view.value != null ? view.value : {};
   const judge = value.judge && typeof value.judge === 'object' ? value.judge : {};
   const ops = [];
 
-  ops.push.apply(ops, presetOps(local.preset));
-  ops.push.apply(ops, modesOps(local.modes));
+  ops.push.apply(ops, presetOps(draft.preset));
+  ops.push.apply(ops, modesOps(draft.modes));
 
-  ops.push.apply(ops, judgeFieldOps(judge.provider, ['judge', 'provider'], local.judgeProvider));
-  ops.push.apply(ops, judgeFieldOps(judge.model, ['judge', 'model'], local.judgeModel));
-  ops.push.apply(ops, judgeFieldOps(judge.systemPrompt, ['judge', 'systemPrompt'], local.judgeSystemPrompt));
+  ops.push.apply(ops, judgeFieldOps(judge.provider, ['judge', 'provider'], draft.judgeProvider));
+  ops.push.apply(ops, judgeFieldOps(judge.model, ['judge', 'model'], draft.judgeModel));
+  ops.push.apply(ops, judgeFieldOps(judge.systemPrompt, ['judge', 'systemPrompt'], draft.judgeSystemPrompt));
 
   const num = (raw, stored) => {
     const trimmed = trimToNull(raw);
@@ -298,11 +315,11 @@ function buildOps(view, local, t) {
     }
   };
 
-  replaceField(judge.timeoutMs, ['judge', 'timeoutMs'], num(local.judgeTimeoutMs, judge.timeoutMs));
-  replaceField(judge.maxTokens, ['judge', 'maxTokens'], num(local.judgeMaxTokens, judge.maxTokens));
-  replaceField(judge.concurrency, ['judge', 'concurrency'], num(local.judgeConcurrency, judge.concurrency));
+  replaceField(judge.timeoutMs, ['judge', 'timeoutMs'], num(draft.judgeTimeoutMs, judge.timeoutMs));
+  replaceField(judge.maxTokens, ['judge', 'maxTokens'], num(draft.judgeMaxTokens, judge.maxTokens));
+  replaceField(judge.concurrency, ['judge', 'concurrency'], num(draft.judgeConcurrency, judge.concurrency));
 
-  const levels = parseLevels(local.levels).value;
+  const levels = parseLevels(draft.levels).value;
   ops.push.apply(ops, levelsOps(levels));
 
   return ops;

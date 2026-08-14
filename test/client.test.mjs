@@ -155,9 +155,29 @@ test('YoloStore: load 成功 → status ready, 取 revision, subscribe 同步通
 
   assert.equal(store.getSnapshot().status, 'ready')
   assert.equal(store.getSnapshot().revision, 5)
+  assert.equal(store.getSnapshot().writable, true)
   assert.equal(store.getSnapshot().view.value.preset, 'yolo')
   assert.equal(store.getSnapshot().statusInfo.preset, 'yolo')
   assert.ok(notified >= 1, 'load 期间应多次同步通知')
+})
+
+test('YoloStore: load 把服务端 writable 写入快照', async () => {
+  // 服务端明确 writable:false → 快照同步为 false
+  const ro = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => ({ ok: true, value: { writable: false, view: { ns: 'yolo-mode', revision: 2, value: {}, secrets: [] } } }),
+    statusView: () => statusOk({ preset: 'off' }),
+  }) })
+  assert.equal(ro.getSnapshot().writable, true, '初始默认可写')
+  await ro.load()
+  assert.equal(ro.getSnapshot().writable, false)
+
+  // 服务端不提供 writable → 保持初始 true
+  const keep = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => ({ ok: true, value: { view: { ns: 'yolo-mode', revision: 1, value: {}, secrets: [] } } }),
+    statusView: () => statusOk({ preset: 'off' }),
+  }) })
+  await keep.load()
+  assert.equal(keep.getSnapshot().writable, true)
 })
 
 test('YoloStore: load 任一端点失败 → status error 记录 code', async () => {
@@ -467,6 +487,55 @@ test('构建产物: 渲染函数可调用且返回元素或 null', () => {
   const chipText = flattenText(chipEl)
   assert.ok(chipText.startsWith('YOLO '))
 })
+
+test('构建产物: SettingsSection ready 时按 writable 禁用保存按钮', async () => {
+  const mod = loadBundle()
+  const { state, ctx } = createFakeCtx()
+  mod.apply(ctx)
+  const injected = state.registered[0].opts.inject()
+  const t = injected.t
+  // 与 bindSnapshotSelector 相同语义：读取快照并按需套选择器。
+  const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
+
+  // 可写：ready 渲染出保存按钮且可用
+  const writableStore = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', modes: [], levels: {}, judge: {} }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  }) })
+  await writableStore.load()
+  const el1 = state.registered[0].renderer({ store: writableStore, useSnapshot: snapOf(writableStore), t })
+  const save1 = findButtonByText(el1, t('save'))
+  assert.ok(save1, 'ready 渲染应包含保存按钮')
+  assert.equal(save1.props.disabled, false)
+
+  // 只读：保存按钮禁用
+  const roStore = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => ({ ok: true, value: { writable: false, view: { ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', modes: [], levels: {}, judge: {} }, secrets: [] } } }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  }) })
+  await roStore.load()
+  const el2 = state.registered[0].renderer({ store: roStore, useSnapshot: snapOf(roStore), t })
+  const save2 = findButtonByText(el2, t('save'))
+  assert.ok(save2, '只读 ready 渲染仍包含保存按钮')
+  assert.equal(save2.props.disabled, true)
+})
+
+/** 在元素树中按扁平文案查找第一个 button 元素。 */
+function findButtonByText(el, text) {
+  let found = null
+  const walk = (node) => {
+    if (found !== null || node === null || node === undefined) return
+    if (typeof node === 'string' || typeof node === 'number') return
+    if (node.type === 'button' && flattenText(node) === text) {
+      found = node
+      return
+    }
+    const kids = Array.isArray(node.children) ? node.children : [node.children]
+    for (const k of kids) walk(k)
+  }
+  walk(el)
+  return found
+}
 
 function flattenText(el) {
   if (el === null || el === undefined) return ''

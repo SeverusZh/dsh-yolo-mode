@@ -32,6 +32,7 @@ export function initialYoloState() {
     statusInfo: undefined,
     revision: 0,
     conflicted: false,
+    writable: true,
     error: undefined,
     open: false,
   };
@@ -131,6 +132,11 @@ export class YoloStore {
       conflict: false,
       error: undefined,
     };
+    // The host announces writability per view; keep the initial default when
+    // the endpoint does not report it.
+    if (viewResult.value.writable !== undefined) {
+      next.writable = viewResult.value.writable;
+    }
     if (view !== undefined && view !== null) {
       next.revision = typeof view.revision === 'number' ? view.revision : 0;
     }
