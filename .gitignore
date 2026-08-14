@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# logs
+*.log
+
+# research artifacts (cloned third-party repos)
+_research/
+
+# session import artifacts (not project content)
+dsh-session-*.zip
+session.jsonl
+rebuilt-text.xml
+session-parsed-summary.md
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
