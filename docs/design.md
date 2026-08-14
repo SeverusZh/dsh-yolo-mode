@@ -258,6 +258,9 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 - `test/client.test.mjs`：mock `window.__ModuleLoader__` 与 `require`（react/cordis 假对象），加载 lib/client.js，断言 exports.apply 为函数且注册调用参数正确（fake slots 捕获 register 调用）。
 - 既有测试全绿不回归。
 
-### 11.6 安装生效
+### 11.6 安装生效（2026-08-14 实测修正）
 
-包已 link 进 web profile；改动 + 页面刷新生效（client bundle 哈希变化后需刷新浏览器；必要时 touch cordis.patch.yml 触发重扫）。验收：npm test 全绿；`dsh --profile web --dump-config` 无错；浏览器刷新后输入栏出现 chip、设置页出现 'YOLO 审批'。
+- patch 热重载能：**新增行**的挂载、行**config 变更**（apply 以新 config 重跑）。
+- patch 热重载**不能**：已挂载行的**模块代码**重新导入（模块 import 缓存在 entry 启动时；config 变更只重跑 apply，不重新 import）。
+- 因此 v0.2.0 的宿主新代码与 dsh.client 扫描需**重启 DSH** 生效（原规划"需用户手动重启"正确）；重启后：宿主注册 settings ns + 路由，客户端扫描发现 dsh.client 并把 bundle 注入 __DSH_BOOT__，浏览器刷新后 chip/设置页出现。
+- 验收：npm test 全绿；重启后 `GET /plugins/yolo-mode/status` 返回 200；设置页出现 'YOLO 审批'。

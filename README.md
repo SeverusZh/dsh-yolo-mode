@@ -2,9 +2,16 @@
 
 `dsh-yolo-mode` 是一个 DeepSeek Harness (DSH) 宿主侧插件：当会话处于可写沙箱模式、且当前审批策略为 `ask` 时，使用大模型（LLM）自动裁决沙箱**升权申请**（`escalate sandbox to <targetMode>: <justification>`），并根据用户选择的预设 / 自定义层级决定是「放行 / 拒绝 / 转人工」。它不改变 DSH 既有的沙箱模式与审批策略词汇表，仅在 `ask` 策略下作为审批应答者介入。**任何不确定或失败路径都不放行（fail-closed）。**
 
-> 版本：v0.1.0 ｜ 详见 [CHANGELOG.md](CHANGELOG.md)。
+> 版本：v0.2.0 ｜ 详见 [CHANGELOG.md](CHANGELOG.md)。v0.2.0 起为双面包：附带客户端 UI（状态 chip、统计面板、设置页）。
 
 ---
+
+## 〇、界面（v0.2.0）
+
+- **输入栏状态 chip**：会话输入栏左侧显示 `YOLO <preset>`，点击弹出统计面板（总审批 / 放行 / 拒绝 / 转人工 + 最近 20 条决策）。
+- **设置页**：设置面板新增「YOLO 审批」页，可在线修改预设、生效沙箱模式、judge 参数与 levels 层级（JSON），保存后**即时生效**（持久化到 settings.yaml）。
+- 配置优先级：插件行 `config` 为基底，设置页保存值覆盖其上；行 config 中的 `judge.provider/model` 仍可用于首次启用裁判。
+- 升级到 v0.2.0 后请**重启 DSH 并刷新浏览器**（已挂载插件行的模块代码更新需重启才能重新导入）。
 
 ## 一、功能简介
 

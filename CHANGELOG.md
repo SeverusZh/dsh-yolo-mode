@@ -2,6 +2,27 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.2.0] - 2026-08-14
+
+### 新增
+
+- **客户端 UI（双面包）**：`dsh-yolo-mode` 声明 `dsh.client` 并导出 `lib/client.js`（手写 ModuleLoader 工厂，零构建），提供三处界面：
+  - 输入栏左侧状态 chip（`conversation.input.left`，显示 `YOLO <preset>`，点击开关弹窗）；
+  - 全局面板（`shell.overlay`）：运行统计（总审批/放行/拒绝/转人工）+ 最近 20 条决策表 + 刷新；
+  - 设置页（`settings.section`，'YOLO 审批'）：预设/生效模式/judge 参数/levels JSON 的在线编辑与保存。
+- **HTTP API**：`GET /plugins/yolo-mode/status`（状态与统计）、`POST /plugins/yolo-mode/config`（配置校验后持久化），由宿主 webServer 路由提供。
+- **settings 集成**：settings 命名空间 `yolo-mode`（自由 JSON 分区，落盘 settings.yaml）；`effectiveConfig()` 每次裁决将插件行 config 与 settings 分区合并规范化，配置改动即时生效（无需重启）。
+- **内存统计**：每次裁决累计 total/allowed/rejected/delegated 与最近 20 条决策环形缓冲。
+- **judge 实例缓存**：按 judge 配置键缓存裁判实例，配置变化自动重建。
+
+### 变更
+
+- package.json：version 0.2.0；exports 增加 `./client`；peerDependencies 增加 `react`、`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-ui-slots`、`@deepseek-ai/schemastery`。
+
+### 已知限制
+
+- 已挂载插件行的**模块代码**更新需要重启 DSH 才能重新导入（patch 热重载只覆盖新行挂载与 config 变更）；v0.1.0 → v0.2.0 升级后请重启 DSH 并刷新浏览器。
+
 ## [0.1.0] - 2026-08-14
 
 ### 新增
