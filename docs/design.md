@@ -218,3 +218,46 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 | **真实 E2E（主会话实测，origin=main）** | 主会话切回 `workspace-write + ask` 后自主触发 pwsh 越界写入升权 | 裁判 deny → `rejected`（法官理由：最高权限目标模式 + 理由不足 + 无清理验证机制，fail-closed）；工具侧收到拒绝错误 |
 
 **遗留**：三路径中的「裁判放行 allowed-once」与「不确定/失败 → 转人工」两条路径在真实会话中尚未被触发（其余两路径由 47 项单测 + 10 项冒烟覆盖）。审计日志位于宿主真实临时目录（`os.tmpdir()`，非沙箱重映射的会话 TEMP）：`C:\Users\<user>\AppData\Local\Temp\dsh-yolo\judge.log`。
+
+## 11. M3 客户端 UI 设计（v0.2.0，本轮实施）
+
+**架构修正**：原规划"独立包 dsh-client-ui-yolo-mode"改为**单一双面包**——`dsh-yolo-mode` 自身声明 `dsh.client`（client 半边无独立用户价值，免去第二个 patch 行与版本对齐）。已核实的机制：
+
+- 客户端包声明：package.json `"dsh": { "client": { "platform": "web", "inject": [...] } }` + `exports["./client"]` 指向**已构建**的 `lib/client.js`；host 的 `dsh-client-modules` 扫描已启用 Loader 行，把 bundle 哈希进 `__DSH_BOOT__` 并在 `/plugins` 下提供。
+- 客户端 bundle 格式（已核实现成包）：`window.__ModuleLoader__.load({ id, factory: (require) => { var module={exports:{}}; var exports=module.exports; Object.defineProperty(exports, Symbol.toStringTag, {value:'Module'}); /* CJS 代码，React 经 require('react') */ return module.exports } })`；导出面为 `exports.apply`（+可选 `exports.inject`）。**手写该格式，零构建、零依赖**。
+- Slot（本机实测）：状态 chip → `conversation.input.left`（list，id/order/label，scope=session，ownerProps `InputZone{session,input}`，当前无占位者）；弹窗 → `shell.overlay`（list，root）；设置页 → `settings.section`（list，id/order/label，ownerProps `{close}`）。
+- 设置持久化：宿主 `ctx.get('settings').register('yolo-mode', schema)`（`@deepseek-ai/schemastery`，peerDep）→ `SettingsScope{get/update/replace}`，settings-file 后端落盘 settings.yaml。
+- 数据桥：**自建 webServer 路由**（`ctx.get('webServer').register({kind:'exact', path, handler})`，node:http 原语），规避 Typert 生成器与 apiproxy 设置白名单限制。
+
+### 11.1 HTTP API（宿主）
+
+- `GET /plugins/yolo-mode/status` → `200 {preset, modes, levels, judge:{provider,model,systemPrompt,timeoutMs,maxTokens,concurrency}, judgeConfigured, stats:{total,allowed,rejected,delegated}, recent:[{time,toolName,targetMode,decision,outcome,reason?}]}`（recent ≤20，倒序）。
+- `POST /plugins/yolo-mode/config`，body（≤64KB）`{preset?, modes?, levels?, judge?{provider?,model?,systemPrompt?,timeoutMs?,maxTokens?,concurrency?}}` → 合并候选 `normalizeConfig(merge(rowCfg, settingsSection, body))` 校验（fail-loud，400 带错误信息）→ `settings.update('yolo-mode', body)` → `200 {ok:true, config}`。非 JSON/超长/方法错误 → 4xx。
+- 信任边界：与 DSH Web UI 同源同权，不做额外认证（README 安全须知注明）。
+
+### 11.2 宿主变更（lib/index.js / lib/policy.js）
+
+- `lib/policy.js` 新增 `mergeConfig(base, ...overlays)`（judge 子对象合并、modes/levels 替换）导出。
+- `lib/index.js`：settings ns `yolo-mode` 注册（schema: preset enum、modes 数组、levels 对象、judge 子对象全字段）；`effectiveConfig()` = `normalizeConfig(mergeConfig(rowCfg, scope.get()))` 每次裁决时调用；内存统计 `stats` 计数 + `recent` 环形缓冲（20）在 audit() 时更新；`buildStatus(cfg, stats, recent)` 纯函数导出（供测试）；`createApiHandlers({getStatus, applyConfig})` 工厂（node:http，可注入）导出；`ctx.effect` 注册两个路由。
+
+### 11.3 客户端（lib/client.js，手写 ModuleLoader 工厂）
+
+- `exports.apply = function(ctx)`：`ctx.get('slots')` 缺失即返回；`slots.inject` 三个键：
+  - `conversation.input.left` id `yolo-mode-chip`：chip 显示 `YOLO <preset>`，点击切换弹窗；挂载时 fetch status 填充模块级 store（订阅式，无外部依赖）。
+  - `shell.overlay` id `yolo-mode-popup`：面板=统计三行 + 最近决策表（≤20）+ 刷新按钮；store 关闭渲染 null。
+  - `settings.section` id `yolo-mode`（order 25, label 'YOLO 审批'）：预设下拉（6 项）、modes 复选、judge provider/model/systemPrompt 输入与 timeoutMs/maxTokens/concurrency 数字、levels JSON 文本域（JSON.parse 校验）、保存按钮 POST config、显示结果；props.close 可用。
+- 全部 React.createElement；样式用内联 style；fetch 用浏览器全局 fetch（同源）。
+
+### 11.4 package.json 变更（W-A 统一执行）
+
+`dsh.client` 声明、`exports["./client"]`、peerDependencies 增加 `react`、`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-ui-slots`、`@deepseek-ai/schemastery`；version 0.2.0。
+
+### 11.5 测试（node --test 扩展）
+
+- `test/api.test.mjs`：mergeConfig（judge 合并/modes 替换）、buildStatus 装配、createApiHandlers（fake req/res：GET 200、POST 合法 200、非法 body 400、非 JSON 400、超长 413、方法 405）。
+- `test/client.test.mjs`：mock `window.__ModuleLoader__` 与 `require`（react/cordis 假对象），加载 lib/client.js，断言 exports.apply 为函数且注册调用参数正确（fake slots 捕获 register 调用）。
+- 既有测试全绿不回归。
+
+### 11.6 安装生效
+
+包已 link 进 web profile；改动 + 页面刷新生效（client bundle 哈希变化后需刷新浏览器；必要时 touch cordis.patch.yml 触发重扫）。验收：npm test 全绿；`dsh --profile web --dump-config` 无错；浏览器刷新后输入栏出现 chip、设置页出现 'YOLO 审批'。

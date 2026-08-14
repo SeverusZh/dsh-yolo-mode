@@ -1,11 +1,12 @@
 {
   "name": "dsh-yolo-mode",
-  "version": "0.1.0",
-  "description": "dsh-yolo-mode —— DeepSeek Harness 宿主侧插件：当会话处于可写沙箱模式且审批策略为 ask 时，用大模型自动裁决沙箱升权申请，支持内置预设与自定义权限层级。",
+  "version": "0.2.0",
+  "description": "dsh-yolo-mode —— DeepSeek Harness 双面包插件：当会话处于可写沙箱模式且审批策略为 ask 时，用大模型自动裁决沙箱升权申请，支持内置预设与自定义权限层级，并提供宿主 settings + HTTP 状态/配置 API 与 Web 客户端 UI。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
-    ".": "./lib/index.js"
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js"
   },
   "files": [
     "lib"
@@ -27,7 +28,20 @@
   ],
   "peerDependencies": {
     "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.6"
+    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.6",
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.0-rc.6",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
   },
   "scripts": {
     "test": "node --test"
