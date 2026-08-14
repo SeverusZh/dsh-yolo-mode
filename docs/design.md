@@ -264,3 +264,82 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 - patch 热重载**不能**：已挂载行的**模块代码**重新导入（模块 import 缓存在 entry 启动时；config 变更只重跑 apply，不重新 import）。
 - 因此 v0.2.0 的宿主新代码与 dsh.client 扫描需**重启 DSH** 生效（原规划"需用户手动重启"正确）；重启后：宿主注册 settings ns + 路由，客户端扫描发现 dsh.client 并把 bundle 注入 __DSH_BOOT__，浏览器刷新后 chip/设置页出现。
 - 验收：npm test 全绿；重启后 `GET /plugins/yolo-mode/status` 返回 200；设置页出现 'YOLO 审批'。
+
+## 12. v0.3.0 UI 重做 —— 对齐 dsh-subagents-options 参考架构
+
+v0.2.0 的两个根本缺陷（用户指正）：
+1. **webServer 不可见**：树外插件经 `ctx.get('webServer')` 永远拿不到服务（参考项目 `src/bridge-entry.ts` 头注已实测验证；`dsh-client-connection` 自身也以 `inject = ["webServer"]` 挂载）。→ 路由从未注册。
+2. 手写 fetch 客户端 bundle 未对齐平台惯例（connection RPC 信封 / locale / 快照 store / revision 冲突）。
+
+v0.3.0 完全按参考项目（`E:\MyProjectCollection\Plugins\dsh-subagents-options`）的架构重做：
+
+### 12.1 包结构（三入口：主插件 / 桥接条目 / 客户端）
+
+```
+package.json  exports: "." → lib/index.js；"./bridge" → lib/bridge-entry.js；"./client" → lib/client/index.js
+lib/index.js        主插件（inject ['llm','settings']；approval 应答者 + 统计，绝不碰 webServer）
+lib/settings.js     设置分区（namespace/schema/validate/installYoloSettings）
+lib/state.js        模块级共享状态（stats + recent 环，主条目写、桥接条目读，同包模块单例）
+lib/remote.js       桥接实现（RPC 信封 + 三端点 + 前缀路由）
+lib/bridge-entry.js 独立条目：name 'yolo-mode-bridge'，inject ['webServer','settings']，apply → installYoloRemoteBridge
+lib/client/index.js 构建产物（rolldown bundle，src/client/* 源码）
+src/client/*.js     客户端源码（index/locales/store/store-logic/ui）
+scripts/build-client.mjs  rolldown 构建脚本（对齐参考 scripts/build-client.mjs）
+```
+
+### 12.2 宿主 settings（lib/settings.js，镜像参考 src/settings.ts）
+
+- `YOLO_SETTINGS_NAMESPACE = settingsNamespace('yolo-mode')`。
+- `YoloSettingsSchema = z.object({...})` 全字段可选（schemastery object 字段默认可选）：preset `z.union([...PRESETS])`、modes `z.array(z.string())`、levels `z.dict(z.any())`、judge `z.object({provider,model,systemPrompt,timeoutMs,maxTokens,concurrency})`、includeSubagents `z.boolean()`、auditFile `z.string()`。
+- `validateYoloSettings(value)`：写时校验 = `normalizeConfig(value)`（fail-loud 抛错即拒绝写入）。
+- `installYoloSettings(ctx, entry, hooks)` → `installSettingsSection(ctx, ns, schema, entry, hooks)`（`@deepseek-ai/dsh-settings` 导出），entry = 插件行 config（成为 settings base 层）；settings 服务缺失时打日志跳过（零侵入）。
+
+### 12.3 宿主主条目（lib/index.js 重接）
+
+- `inject: ['llm','settings']`；用 `ctx.llm` / `ctx.settings`（不再 ctx.get('llm'/'settings')）。
+- `installYoloSettings(ctx, rawConfig ?? {}, { setSource: (thunk) => { settingsSource = thunk }, onChange: () => {}, validate: validateYoloSettings })`。
+- `effectiveConfig() = normalizeConfig(settingsSource())`（resolved = defaults + base(行配置) + 用户层）；**移除 mergeConfig**（policy.js 删除该导出）。
+- judge 缓存 / stats+recent（写入 lib/state.js 模块级单例）/ 审计 / 裁决流水线不变（judge provider/model 等取自 effectiveConfig）。
+- **不再注册任何路由**；`buildStatus` 移入 lib/state.js（纯装配）。
+
+### 12.4 桥接（lib/remote.js + lib/bridge-entry.js，镜像参考 src/remote.ts + envelope.ts）
+
+- 常量：`YOLO_RPC_CHANNEL='/yolo-mode'`、`YOLO_RPC_VIEW='settingsView'`、`YOLO_RPC_MUTATE='settingsMutate'`、`YOLO_RPC_STATUS='statusView'`（statusView 为本插件扩展）。
+- 信封语义（与 connection RPC 通道一致）：非 POST → 404；content-type 非 application/json → 415；Host 头非 loopback → 403；body 非法 JSON → 400；信封（`{rpcId, method, payload}`）非法 → 200 bad-request（固定 rpcId）；method 与路径推导端点不符 → 200 bad-request；dispatch 异常 → 500。响应一律 `RpcResult` 信封（`{rpcId, ok, value|error}`，镜像参考 buildServerResponse）。
+- `settingsView` → `{writable, view}`（`settings.describe({redactSecrets:true})` 中挑出本 ns 的 `SettingsNamespaceView`，镜像参考 toDirectorNamespaceView）。
+- `settingsMutate` → 载荷 `{ns, ops, expectedRevision?}`；ns 不符 → bad-request；`settings.mutate(branded, ops, expectedRevision)`，`SettingsConflictError` → `settings-conflict`（带 expected/actual），其余拒绝 → `settings-rejected`；成功后返回新 redacted view。
+- `statusView` → 从 lib/state.js 读 stats/recent 装配 `{preset, judgeConfigured, stats, recent}`（不触碰 settings）。
+- `installYoloRemoteBridge(ctx)`：`ctx.effect(() => ctx.webServer.register({kind:'prefix', path:'/yolo-mode', handler}))`；handler 内含 loopback 围栏与全量异常兜底。
+- `lib/bridge-entry.js`：`export const name='yolo-mode-bridge'; export const inject=['webServer','settings']; export function apply(ctx){ installYoloRemoteBridge(ctx) }`。
+
+### 12.5 客户端（src/client/*.js → rolldown → lib/client/index.js）
+
+- `exports.inject = ['slots','locale','connection','remote']`（`dsh.client.inject` 同为这组**短服务名**）。
+- `apply(ctx)`：
+  - `ctx.locale.register('settings.yoloMode', {zh, en})`（locales.js：nav/chip/popup/表单全部文案双语）。
+  - `connection = ctx.get('connection')`；`new YoloStore({ rpc: connection.rpc })`；`useSnapshot = bindSnapshotSelector(store.store)`（`@deepseek-ai/dsh-client-web-react`）。
+  - 失效订阅：`ctx.remote.$on('settings/document-updated', (ns) => ns === 'yolo-mode' && refresh)`、`ctx.on('connection/reset', refresh)`。
+  - Slot 注册（`ctx.slots.inject` + `register`）：`settings.section`（id 'yolo-mode'、order 25、label 为 `() => t('nav')`、`locale: NS`、inject 面 `{store, useSnapshot, t}`）；`conversation.input.left`（id 'yolo-mode-chip'）；`shell.overlay`（id 'yolo-mode-popup'）。
+- `store.js`（镜像参考 store.ts）：快照 `{status:'idle'|'loading'|'ready'|'error', view, statusInfo, revision, conflicted, error}`；`load()` = `rpc.call('/yolo-mode','settingsView',{})` + `rpc.call('/yolo-mode','statusView',{})`；`mutate(ops)` = `rpc.call('/yolo-mode','settingsMutate',{ns:'yolo-mode', ops, expectedRevision})`；冲突（`settings-conflict`）→ 标记 conflicted 并重载。
+- `store-logic.js`（纯函数，镜像参考 store-logic.ts）：optional/isBlank、字段 ops 构造（`set(['preset'],v)`、`set(['modes'],arr)`、`set(['levels'],obj)`、judge 字段逐字段 set/unset）、`advanceRevision/markConflict/adoptRevision`、`classifyMutateError`。
+- UI（React.createElement，无 JSX）：设置页从 `view.value`（resolved）渲染、`view.user` 判断覆盖；保存构造路径 ops；chip/popup 读 `statusInfo`。
+- `scripts/build-client.mjs`（镜像参考）：rolldown 打包 `src/client/index.js`（format cjs），external `/^@deepseek-ai\//`、`/^react($|\/)/`、`/^react-dom($|\/)/`，包裹 `window.__ModuleLoader__.load({id:'dsh-yolo-mode', factory:(require)=>{...}})` 输出 `lib/client/index.js`。rolldown 解析顺序：本地 node_modules → 回退 `E:/MyProjectCollection/Plugins/dsh-subagents-options/node_modules`（开发机便利）；package.json 声明 devDependency `rolldown: ^1.2.4`。
+- 删除旧 `lib/client.js`（v0.2.0 手写版）。
+
+### 12.6 package.json（W-R1 统一改）
+
+- version 0.3.0；exports 增加 "./bridge" 与 "./client"（client 指向 lib/client/index.js）；`dsh.client.inject` 改短名 `["slots","locale","connection","remote"]`。
+- peerDependencies 对齐参考子集：`react`、`@deepseek-ai/cordis`、`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-timeout`、`@deepseek-ai/dsh-settings`、`@deepseek-ai/dsh-host-apiproxy`、`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-connection`、`@deepseek-ai/dsh-client-ui-slots`、`@deepseek-ai/dsh-client-locale`、`@deepseek-ai/dsh-client-web-react`、`@deepseek-ai/schemastery`（版本 ^0.1.0-rc.6 / react ^18.2.0）；devDependencies 增加 `rolldown: ^1.2.4`。
+- scripts：`build`（node scripts/build-client.mjs）、`build:client` 同、`test`（node --test）。
+
+### 12.7 测试
+
+- `test/remote-bridge.test.mjs`：信封处理器（fake req/res + fake settings seam）：404/415/403/400/200-bad-request×2、settingsView 装配、settingsMutate 成功/conflict/rejected、statusView 装配。
+- `test/settings.test.mjs`：validateYoloSettings 通过/拒绝、resolved+normalizeConfig 组合。
+- `test/client.test.mjs`：store-logic 纯函数（revision 机、ops、classify）+ 构建产物冒烟（mock window/require 加载 lib/client/index.js，断言 exports.apply/inject）。
+- 既有 policy/judge 测试全绿不回归；test/api.test.mjs 删除（被 remote-bridge 取代）。
+
+### 12.8 安装与生效
+
+- web profile patch 追加桥接行（安装步骤，主管执行）：`- insert: [{ id: yolo-mode-bridge, name: dsh-yolo-mode/bridge }]`。
+- **重启 DSH + 刷新浏览器**后验收：输入栏 chip、设置页「YOLO 审批」、`POST /yolo-mode/settingsView` 正常应答。

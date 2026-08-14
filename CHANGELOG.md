@@ -2,6 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.3.0] - 2026-08-14
+
+### 变更（UI 重做，对齐 dsh-plugin-subagent-director 参考架构）
+
+- **独立桥接条目**：新增 `./bridge` 入口（`lib/bridge-entry.js`，`inject: ['webServer','settings']`），自发布 `/yolo-mode` 前缀路由。修复 v0.2.0 根因——宿主 `webServer` 只能经 `inject` 取得，树外插件 `ctx.get('webServer')` 永远拿不到（参考项目已实测）。
+- **RPC 信封桥**：`/yolo-mode` 上实现 `settingsView` / `settingsMutate` / `statusView` 三端点，语义镜像 connection RPC 通道（loopback 围栏、乐观 revision 冲突、redacted 视图、路径 op）。
+- **settings 规范布线**：改用 `installSettingsSection`（`@deepseek-ai/dsh-settings`），行 config 作为 `base` 层；`effectiveConfig() = normalizeConfig(resolved)`；移除手写 mergeConfig。
+- **客户端 rolldown 构建**：`src/client/*.js` → `scripts/build-client.mjs`（rolldown，external react/@deepseek-ai）→ `lib/client/index.js`；客户端 `inject: ['slots','locale','connection','remote']`，locale 双语字典、`bindSnapshotSelector` 快照 store、`connection.rpc.call` 走桥、revision 冲突机。
+- **主条目 inject**：`export const inject = ['llm','settings']`（命名导出插件，非 default 函数）。
+
 ## [0.2.0] - 2026-08-14
 
 ### 新增
