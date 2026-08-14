@@ -54,7 +54,7 @@ dsh-yolo-mode/
 config:
   preset: balanced            # 'off'|'strict'|'balanced'|'permissive'|'yolo'|'custom'，默认 balanced
   modes: ['workspace-write']  # 会话有效沙箱模式 ∈ 该列表才介入；默认仅 workspace-write
-  levels: {}                  # preset=custom 时的层级表（见 §4）；也可用于覆盖内置预设
+  levels: {}                  # 层级表：levels.tools 可对任意预设逐工具覆盖；levels[targetMode] 仅在 preset=custom 时生效（见 §4）
   judge:
     provider: ''              # 启用 LLM 裁判所必需（空串 = 未配置 → judge 决策按错误回退）
     model: ''
@@ -139,7 +139,7 @@ export function createJudge({ llm, provider, model, systemPrompt, timeoutMs, max
 ```
 
 - `llm`：`ctx.llm` 服务对象（`llm.stream` 存在，否则首调抛 `JudgeError('NO_ADAPTER')`）；测试注入假对象。
-- `input`：`{ toolName, targetMode, justification, workspaceRoot, argumentsSummary? }`。
+- `input`：`{ toolName, targetMode, justification, workspaceRoot, argumentsSummary?, signal? }`；`signal` 为本次调用的上游取消信号（如审批请求的 `req.signal`），中止 → `JudgeError('ABORTED')`，优先于构造时传入的 signal。
 - 内置 system prompt（`systemPrompt` 为空时）：安全审计者角色，必须包含：①"你不是发起方 agent，只依据事实裁决"；②"存疑即 deny/unsure"；③"绝不因发起方的目标/意图放行"。用户消息 = 单条 `createUserMessage(JSON.stringify(input, null, 2))`。
 - 流式组装：`for await (const chunk of llm.stream({ provider, model, messages, system, maxTokens, signal }))` → `assembler.push(chunk)`；`finish` 分片后取 `assembler.blocks()` 中的 text 块（无 text → `BAD_OUTPUT`；出现 tool-call 块 → `BAD_OUTPUT`）。
 - 超时：`deadline(reqSignal, timeoutMs, 'YOLO_JUDGE_TIMEOUT')` 的 signal 传入 stream；组装循环内检查 `signal.aborted` → `JudgeError('TIMEOUT')`（上游 signal 中止则 `'ABORTED'`，按 signal.reason/代码区分：上游传递的 signal 先于 deadline 判断）。
@@ -180,6 +180,7 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 3. tool-call 块流 → BAD_OUTPUT。
 4. 流抛出 → STREAM_ERROR。
 5. 上游已中止 signal → ABORTED。
+5b. 单次调用 `input.signal` 已中止 → ABORTED（且不消耗流）。
 6. 超时（timeoutMs=30 + 永不产出的慢流）→ TIMEOUT。
 7. concurrency=1 下并发两调用 → 其一 OVERLOAD（时序敏感可用"占用者不释放"构造：首调用挂起时发起次调用，断言 OVERLOAD 后释放）。
 8. llm 无 stream → NO_ADAPTER。

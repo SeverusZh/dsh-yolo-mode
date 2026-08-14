@@ -1,0 +1,35 @@
+{
+  "name": "dsh-yolo-mode",
+  "version": "0.1.0",
+  "description": "dsh-yolo-mode —— DeepSeek Harness 宿主侧插件：当会话处于可写沙箱模式且审批策略为 ask 时，用大模型自动裁决沙箱升权申请，支持内置预设与自定义权限层级。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "approval",
+    "sandbox",
+    "permissions",
+    "llm",
+    "yolo",
+    "self-hosted"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-timeout": "^0.1.0-rc.6"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
