@@ -214,5 +214,6 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 | 组合解析 | `dsh --profile web --dump-config` | 退出码 0，yolo-mode 行配置正确 |
 | 活动树挂载 | 动态探针枚举 `ctx.loader.entries()` | `include:yolo-mode` fiber **ACTIVE**(2)、error=null |
 | 真实 LLM 裁判路由 | 动态探针以 `opencode-go/deepseek-v4-flash` + 内置防回环 prompt 流式裁决 | 合法 JSON 输出，越界写入被正确 **deny**（fail-closed 实证） |
+| **真实 E2E（用户会话实测）** | 用户于 `workspace-write + ask` 新会话触发 pwsh 越界写入 → 升权申请被本插件裁决 | 完整链路实证：`tool/call(pwsh)` → `approval/asked(reason=escalate sandbox to danger-full-access…)` → 裁判 deny → `approval/decided(outcome=rejected)`（3.1s 裁判往返）→ 审计日志记录裁判理由 |
 
-**遗留**：真实升权 seam 触发的三路径 E2E 需用户在 `workspace-write + ask` 会话触发（本会话为 `never` 策略，seam 在瀑布前拒绝，插件天然不介入）。审计日志：`%TEMP%\dsh-yolo\judge.log`。
+**遗留**：三路径中的「裁判放行 allowed-once」与「不确定/失败 → 转人工」两条路径在真实会话中尚未被触发（其余两路径由 47 项单测 + 10 项冒烟覆盖）。审计日志：`%TEMP%\dsh-yolo\judge.log`。
