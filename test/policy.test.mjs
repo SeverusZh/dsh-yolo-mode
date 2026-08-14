@@ -13,6 +13,7 @@ import {
   resolvePolicy,
   parseJudgeOutput,
   judgeFallback,
+  defaultLevelsFor,
 } from '../lib/policy.js'
 
 /* ------------------------------------------------------------------ *
@@ -249,6 +250,44 @@ test('judgeFallback: custom levels.error / levels.unsure 映射', () => {
   assert.equal(judgeFallback({ preset: 'custom', levels: {}, kind: 'unsure' }), 'delegate')
   // 显式 delegate → delegate
   assert.equal(judgeFallback({ preset: 'custom', levels: { error: 'delegate' }, kind: 'error' }), 'delegate')
+})
+
+/* ------------------------------------------------------------------ *
+ * 组 5：defaultLevelsFor —— 六预设默认 levels（含 custom 空对象）
+ * ------------------------------------------------------------------ */
+test('defaultLevelsFor: 六预设默认 levels 全表（含 custom 空对象）', () => {
+  assert.deepEqual(defaultLevelsFor('off'), { 'workspace-write': 'delegate', 'danger-full-access': 'delegate' })
+  // strict 额外带 error/unsure 回退行（error=deny ↔ judgeFallback strict+error→rejected）
+  assert.deepEqual(defaultLevelsFor('strict'), {
+    'workspace-write': 'judge',
+    'danger-full-access': 'delegate',
+    error: 'deny',
+    unsure: 'delegate',
+  })
+  assert.deepEqual(defaultLevelsFor('balanced'), { 'workspace-write': 'judge', 'danger-full-access': 'judge' })
+  // permissive 额外带 unsure=allow（↔ judgeFallback permissive+unsure→allowed-once）
+  assert.deepEqual(defaultLevelsFor('permissive'), {
+    'workspace-write': 'judge',
+    'danger-full-access': 'judge',
+    unsure: 'allow',
+  })
+  assert.deepEqual(defaultLevelsFor('yolo'), { 'workspace-write': 'allow', 'danger-full-access': 'allow' })
+  // custom → 空对象（用户自填）
+  assert.deepEqual(defaultLevelsFor('custom'), {})
+})
+
+test('defaultLevelsFor: 非法 preset 抛错 / 输出冻结且可被 normalizeConfig 接受', () => {
+  assert.throws(() => defaultLevelsFor('nonsense'))
+  assert.throws(() => defaultLevelsFor(undefined))
+  assert.throws(() => defaultLevelsFor(42))
+  assert.equal(Object.isFrozen(defaultLevelsFor('strict')), true)
+  assert.equal(Object.isFrozen(defaultLevelsFor('custom')), true)
+  // 预填充值可直接进 normalizeConfig（含 error/unsure 回退行，均在合法 policy 值域）
+  const cfg = normalizeConfig({ preset: 'strict', levels: defaultLevelsFor('strict') })
+  assert.equal(cfg.levels.error, 'deny')
+  assert.equal(cfg.levels.unsure, 'delegate')
+  const cfg2 = normalizeConfig({ preset: 'permissive', levels: defaultLevelsFor('permissive') })
+  assert.equal(cfg2.levels.unsure, 'allow')
 })
 
 /* ------------------------------------------------------------------ *

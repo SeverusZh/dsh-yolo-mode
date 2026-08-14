@@ -428,8 +428,7 @@ function createFakeReact() {
 }
 
 /** 假 require：按 specifier 分派 react / dsh-client-web-react。 */
-function createFakeRequire() {
-  const react = createFakeReact()
+function createFakeRequire(react = createFakeReact()) {
   const swr = {
     // 直接读快照，选择器包装 selector。
     bindSnapshotSelector: (source) => (selector) => {
@@ -448,11 +447,50 @@ function createFakeRequire() {
   }
 }
 
-/** 加载构建产物，返回其 exports（factory 调用所得）。 */
-function loadBundle() {
+/**
+ * 带状态的假 React：useState 按调用顺序把值持久化到 hook 数组，setter 写入后
+ * 同实例再次渲染（renderer 重新调用）读到新值 —— 用于模拟「选中预设 → 预填充」
+ * 这类组件内交互。每次组件渲染前需 resetHooks()（等价 React 的 render pass 边界：
+ * hook 游标归零、状态数组跨 pass 保留）。
+ */
+function createStatefulFakeReact() {
+  const hookState = []
+  let hookIndex = 0
+  return {
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
+    Fragment: 'Fragment',
+    resetHooks: () => {
+      hookIndex = 0
+    },
+    useState: (initial) => {
+      const idx = hookIndex++
+      if (!(idx in hookState)) {
+        hookState[idx] = typeof initial === 'function' ? initial() : initial
+      }
+      const set = (v) => {
+        hookState[idx] = typeof v === 'function' ? v(hookState[idx]) : v
+      }
+      return [hookState[idx], set]
+    },
+    useEffect: () => {},
+    // useSyncExternalStore 让选择器 hook 也能工作（用于验证快照读取路径）。
+    useSyncExternalStore: (subscribe, getSnapshot) => getSnapshot(),
+    useLayoutEffect: () => {},
+    useCallback: (fn) => fn,
+    useMemo: (fn) => fn(),
+    useRef: (initial) => ({ current: initial }),
+    useSyncExternalStoreWithSelector: (subscribe, getSnapshot, _ss, selector) => {
+      const snap = getSnapshot()
+      return selector ? selector(snap) : snap
+    },
+  }
+}
+
+/** 加载构建产物，返回其 exports（factory 调用所得）。可选注入自定义假 react。 */
+function loadBundle(react) {
   let captured = null
   const fakeWindow = { __ModuleLoader__: { load: (rec) => { captured = rec } } }
-  const fakeRequire = createFakeRequire()
+  const fakeRequire = createFakeRequire(react)
   const loadFn = new Function('window', 'require', CODE)
   loadFn(fakeWindow, fakeRequire)
   assert.ok(captured, 'window.__ModuleLoader__.load 应被调用并捕获记录')
@@ -722,6 +760,74 @@ test('构建产物: SettingsSection 无目录（llm 缺失）时 model 退回文
   const modelInput = firstChildOfType(modelRow, 'input')
   assert.ok(modelInput, '无目录时 model 应退回文本输入')
   assert.equal(modelInput.props.value, 'manual-model')
+})
+
+test('构建产物: SettingsSection 在 statusInfo 含 presetDefaults 的 fake 快照下可渲染，且预设下拉预填充 systemPrompt/levels（custom 清空）', async () => {
+  // 状态化假 react：同一实例连续渲染可保留组件 hook 状态，模拟选中预设后的重渲染。
+  const react = createStatefulFakeReact()
+  const mod = loadBundle(react)
+  const { state, ctx } = createFakeCtx()
+  mod.apply(ctx)
+  const injected = state.registered[0].opts.inject()
+  const t = injected.t
+  const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
+  const render = () => {
+    react.resetHooks() // render pass 边界：hook 游标归零、状态保留
+    return state.registered[0].renderer({ store, useSnapshot: snapOf(store), t })
+  }
+
+  const strictDefaults = {
+    systemPrompt: 'SP-STRICT',
+    levels: { 'workspace-write': 'judge', 'danger-full-access': 'delegate', error: 'deny', unsure: 'delegate' },
+  }
+  const store = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', levels: {}, judge: {} }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced', presetDefaults: { strict: strictDefaults, custom: { systemPrompt: '', levels: {} } } }),
+  }) })
+  await store.load()
+  assert.equal(store.getSnapshot().status, 'ready')
+  assert.equal(store.getSnapshot().statusInfo.presetDefaults.strict.systemPrompt, 'SP-STRICT')
+
+  // fake 快照（statusInfo 含 presetDefaults）下渲染不抛错
+  let el = render()
+  assert.ok(el, 'ready 渲染应返回元素')
+
+  // 预设下拉：六项齐全
+  const presetRow = findFieldByLabel(el, t('preset'))
+  assert.ok(presetRow, 'preset 字段应存在')
+  const presetSelect = firstChildOfType(presetRow, 'select')
+  assert.ok(presetSelect, 'preset 应渲染为 select')
+  assert.deepEqual(optionValues(presetSelect), ['off', 'strict', 'balanced', 'permissive', 'yolo', 'custom'])
+
+  // 选中 strict → systemPrompt 与 levels 预填充为该预设默认（pretty JSON）
+  presetSelect.props.onChange({ target: { value: 'strict' } })
+  el = render()
+  const spTextarea = firstChildOfType(findFieldByLabel(el, t('systemPrompt')), 'textarea')
+  assert.ok(spTextarea, 'systemPrompt 文本框应存在')
+  assert.equal(spTextarea.props.value, 'SP-STRICT')
+  const levelsTextarea = firstChildOfType(findFieldByLabel(el, t('levels') + ' · ' + t('levelsHint')), 'textarea')
+  assert.ok(levelsTextarea, 'levels 文本域应存在')
+  assert.equal(levelsTextarea.props.value, JSON.stringify(strictDefaults.levels, null, 2))
+
+  // 切到 custom → 两者清空（留空给用户自写）
+  presetSelect.props.onChange({ target: { value: 'custom' } })
+  el = render()
+  const spTextarea2 = firstChildOfType(findFieldByLabel(el, t('systemPrompt')), 'textarea')
+  const levelsTextarea2 = firstChildOfType(findFieldByLabel(el, t('levels') + ' · ' + t('levelsHint')), 'textarea')
+  assert.equal(spTextarea2.props.value, '')
+  assert.equal(levelsTextarea2.props.value, '')
+
+  // statusInfo 缺省（无 presetDefaults）时同样可渲染不抛错（{} 兜底）
+  const plain = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', levels: {}, judge: {} }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  }) })
+  await plain.load()
+  assert.doesNotThrow(() => {
+    react.resetHooks()
+    const el2 = state.registered[0].renderer({ store: plain, useSnapshot: snapOf(plain), t })
+    assert.ok(el2, '缺省 presetDefaults 的渲染应返回元素')
+  })
 })
 
 /** 在元素树中按扁平文案查找字段行（div 下第一个 label 文案匹配）。 */

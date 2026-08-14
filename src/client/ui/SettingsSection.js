@@ -113,6 +113,11 @@ export function SettingsSection(props) {
 
 function ReactSection({ store, useSnapshot, t, close }) {
   const state = useSnapshot((s) => s);
+  // Preset defaults served in statusView (id → { systemPrompt, levels }) used to
+  // pre-fill the system prompt / levels fields when the user picks a preset;
+  // statusInfo may omit them → {} fallback.
+  const statusInfo = state.statusInfo && typeof state.statusInfo === 'object' ? state.statusInfo : {};
+  const presetDefaults = statusInfo.presetDefaults && typeof statusInfo.presetDefaults === 'object' ? statusInfo.presetDefaults : {};
   // Kick the first load once when the settings page mounts: the store starts
   // idle, so without this the page would stay stuck on the intro text until a
   // pushed invalidation arrives. load() is idempotent/generation-guarded.
@@ -217,6 +222,30 @@ function ReactSection({ store, useSnapshot, t, close }) {
     setFailure(undefined);
   };
 
+  /**
+   * Preset change: switch the preset and pre-fill the judge system prompt and
+   * the levels from the preset's defaults served in statusInfo (custom → clear
+   * both so the user writes their own). Implemented as one combined draft
+   * update: several setField calls computed from the same stale closure would
+   * clobber each other under React's batched state updates.
+   */
+  const changePreset = (value) => {
+    const next = Object.assign({}, draft, { preset: value });
+    if (value === 'custom') {
+      next.judgeSystemPrompt = '';
+      next.levels = '';
+    } else {
+      const pd = presetDefaults[value];
+      if (pd && typeof pd === 'object') {
+        next.judgeSystemPrompt = typeof pd.systemPrompt === 'string' ? pd.systemPrompt : '';
+        next.levels = pd.levels === undefined || pd.levels === null ? '' : JSON.stringify(pd.levels, null, 2);
+      }
+    }
+    setDraft(next);
+    setDone(false);
+    setFailure(undefined);
+  };
+
   if (state.status === 'error') {
     return h('div', { style: styles.root },
       h('p', { style: styles.intro },
@@ -238,7 +267,7 @@ function ReactSection({ store, useSnapshot, t, close }) {
         h('select', {
           style: styles.select,
           value: draft.preset,
-          onChange: (e) => setField('preset', e.target.value),
+          onChange: (e) => changePreset(e.target.value),
         },
           PRESETS.map((p) => h('option', { key: p, value: p }, p))),
         h('p', { style: styles.hint }, t('presetHint'))),
