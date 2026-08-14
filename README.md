@@ -110,6 +110,18 @@ levels:
 
 裁决词汇：`allow → allowed-once`（放行）、`deny → rejected`（拒绝）、`delegate → next()`（转人工 / 委托后续应答者）。`judgeFallback` 返回值域为 `allowed-once | rejected | delegate`：`strict+error → rejected`；`permissive+unsure → allowed-once`（文档警示）；其余组合 `→ delegate`；`custom` 读 `levels.error` / `levels.unsure`。
 
+### 每预设默认裁判提示词（v0.4.0）
+
+`judge.systemPrompt` 留空时，按当前预设自动选用对应的默认裁判提示词；显式填写则优先。各预设默认裁判立场：
+
+| 预设 | 默认裁判提示词要点 |
+|---|---|
+| `off` / `yolo` | 不调用裁判（确定性转人工 / 全放行），无提示词 |
+| `strict` 严格 | 最保守审计者：`danger-full-access` 一律拒绝；仅"最小作用范围 `workspace-write` + 理由极充分"才允许；存疑即 deny/unsure |
+| `balanced` 均衡（默认） | 通用审计者：只依据事实、防回环、存疑即 deny/unsure |
+| `permissive` 宽松 | 宽松审计者：理由合理且作用范围可接受即倾向 allow，仅明显破坏性/供应链风险拒绝（保留存疑底线） |
+| `custom` | 按用户层级表裁决：对照 `levels` 中该工具+目标模式策略按其倾向，存疑按 `levels.error`/`levels.unsure` 回退 |
+
 ## 五、安全须知
 
 - **fail-closed**：任何错误、超时、非 JSON、工具块、信号量溢出路径都不会放行；只有明确得到 `allow` 才返回一次性 `allowed-once`。

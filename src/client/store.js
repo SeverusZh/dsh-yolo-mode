@@ -35,22 +35,28 @@ export function initialYoloState() {
     writable: true,
     error: undefined,
     open: false,
+    /** Configurable provider directory (llm.providers). */
+    providers: [],
+    /** Model catalog groups (llm.models). */
+    models: [],
   };
 }
 
 /**
  * The settings/status page controller (one per client surface).
  *
- * @param {object} wire - { rpc } where rpc.call(channel, endpoint, payload)
- *   resolves to { ok: true, value } | { ok: false, error }.
+ * @param {object} options
+ * @param {{ call: (channel: string, endpoint: string, payload: any) => Promise<any> }} options.rpc
+ *   rpc.call(channel, endpoint, payload) resolves to { ok: true, value } |
+ *   { ok: false, error }.
+ * @param {object|null} [options.llm] - optional `connection.api.llm` face
+ *   ({ providers(), models() } returning { result: { ok, value } }); when null
+ *   the directory stays empty and the judge fields fall back to free text.
  */
 export class YoloStore {
-  /**
-   * @param {object} options
-   * @param {{ call: (channel: string, endpoint: string, payload: any) => Promise<any> }} options.rpc
-   */
-  constructor({ rpc }) {
+  constructor({ rpc, llm }) {
     this.rpc = rpc;
+    this.llm = llm == null ? null : llm;
     this._state = initialYoloState();
     this._listeners = new Set();
     this._generation = 0;
@@ -101,16 +107,47 @@ export class YoloStore {
   }
 
   /**
-   * Refresh the whole page snapshot: settings view + live status view. On a
-   * success whose view is present, adopt its revision and go ready; any failure
-   * flips status to 'error' recording the first error code.
+   * Fetch the optional LLM directory (provider list + model catalog) when the
+   * store was constructed with an llm face. Directory failures are NOT fatal:
+   * they leave the snapshot's providers/models empty without flipping status
+   * to 'error' — only the settings/status bridge calls can do that.
+   */
+  async _fetchLlmDirectory() {
+    if (this.llm === null || this.llm === undefined) {
+      return { providers: [], models: [] };
+    }
+    let providers = [];
+    let models = [];
+    try {
+      const response = await this.llm.providers({});
+      const value = response && response.result && response.result.ok ? response.result.value : undefined;
+      if (value && Array.isArray(value.providers)) providers = value.providers;
+    } catch {
+      providers = [];
+    }
+    try {
+      const response = await this.llm.models({});
+      const value = response && response.result && response.result.ok ? response.result.value : undefined;
+      if (value && Array.isArray(value.groups)) models = value.groups;
+    } catch {
+      models = [];
+    }
+    return { providers, models };
+  }
+
+  /**
+   * Refresh the whole page snapshot: settings view + live status view + the
+   * optional LLM provider/model directory. On a success whose view is present,
+   * adopt its revision and go ready; a settings/status failure flips status to
+   * 'error' recording the first error code (the directory never does).
    */
   async load() {
     const generation = ++this._generation;
     this.set({ status: 'loading', error: undefined });
-    const [viewResult, statusResult] = await Promise.all([
+    const [viewResult, statusResult, directory] = await Promise.all([
       this._call(YOLO_RPC_VIEW, {}),
       this._call(YOLO_RPC_STATUS, {}),
+      this._fetchLlmDirectory(),
     ]);
     if (generation !== this._generation) return;
 
@@ -120,6 +157,8 @@ export class YoloStore {
         status: 'error',
         error: code === undefined ? true : code,
         conflicted: false,
+        providers: directory.providers,
+        models: directory.models,
       });
       return;
     }
@@ -131,6 +170,8 @@ export class YoloStore {
       statusInfo: statusResult.value,
       conflict: false,
       error: undefined,
+      providers: directory.providers,
+      models: directory.models,
     };
     // The host announces writability per view; keep the initial default when
     // the endpoint does not report it.

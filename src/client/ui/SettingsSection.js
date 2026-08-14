@@ -19,6 +19,7 @@ import {
   setFieldOps,
   unsetFieldOps,
 } from '../store-logic.js';
+import { presetInfo } from '../presets.js';
 
 const PRESETS = ['off', 'strict', 'balanced', 'permissive', 'yolo', 'custom'];
 const MODE_OPTIONS = [
@@ -88,6 +89,14 @@ const styles = {
   result: { fontSize: 12, lineHeight: '16px' },
   resultOk: { color: '#16a34a' },
   resultErr: { color: '#dc2626' },
+  presetInfo: {
+    border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px',
+    backgroundColor: '#f1f5f9', display: 'flex', flexDirection: 'column', gap: 6,
+  },
+  presetTable: { display: 'flex', flexDirection: 'column', gap: 2 },
+  presetRow: { display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, color: '#374151' },
+  presetValue: { color: '#6b7280', fontFamily: 'monospace' },
+  presetPromptText: { margin: 0, color: '#6b7280', fontSize: 12, lineHeight: '16px' },
 };
 
 /**
@@ -117,6 +126,38 @@ function ReactSection({ store, useSnapshot, t, close }) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState(undefined);
   const [done, setDone] = useState(false);
+
+  // Provider/model options from the live LLM directory (empty when the llm
+  // face is absent or the fetch failed — the model field then falls back to a
+  // free-text input).
+  const providerOptions = (Array.isArray(state.providers) ? state.providers : [])
+    .filter((p) => p && typeof p.provider === 'string' && p.provider !== '')
+    .map((p) => ({
+      id: p.provider,
+      label: p.displayName && typeof p.displayName === 'string' && p.displayName !== '' ? p.displayName : undefined,
+    }));
+  const providerGroup = (Array.isArray(state.models) ? state.models : [])
+    .find((g) => g && g.id === draft.judgeProvider);
+  const modelOptions = providerGroup && Array.isArray(providerGroup.models)
+    ? providerGroup.models
+        .filter((m) => m && typeof m.id === 'string' && m.id !== '')
+        .map((m) => ({
+          id: m.id,
+          label: m.name && typeof m.name === 'string' && m.name !== '' ? m.name : undefined,
+        }))
+    : [];
+
+  /** Pick a provider; clear the model when it no longer belongs to it. */
+  const setProvider = (value) => {
+    const next = Object.assign({}, draft, { judgeProvider: value });
+    const model = draft.judgeModel;
+    if (model !== '' && !modelBelongsTo(value, model, state.models)) {
+      next.judgeModel = '';
+    }
+    setDraft(next);
+    setDone(false);
+    setFailure(undefined);
+  };
 
   // Reflect a fresh server snapshot into the draft (a reload or pushed
   // invalidation). Re-seed only from the leaf values we edit, and skip while a
@@ -187,6 +228,8 @@ function ReactSection({ store, useSnapshot, t, close }) {
     return h('div', { style: styles.root }, h('p', { style: styles.intro }, t('sectionIntro')));
   }
 
+  const preset = presetInfo(draft.preset);
+
   return h('div', { style: styles.root },
     h('p', { style: styles.intro }, t('sectionIntro')),
     h('div', { style: styles.card },
@@ -199,6 +242,7 @@ function ReactSection({ store, useSnapshot, t, close }) {
         },
           PRESETS.map((p) => h('option', { key: p, value: p }, p))),
         h('p', { style: styles.hint }, t('presetHint'))),
+      preset !== null ? presetInfoBlock(styles, t, preset) : null,
 
       h('div', { style: styles.modesRow },
         h('label', { style: styles.fieldLabel }, t('modes')),
@@ -212,8 +256,8 @@ function ReactSection({ store, useSnapshot, t, close }) {
         h('p', { style: styles.hint }, t('modesHint'))),
 
       h('div', { style: styles.grid },
-        fieldInput(styles, t, draft, setField, 'judgeProvider', 'provider'),
-        fieldInput(styles, t, draft, setField, 'judgeModel', 'model'),
+        fieldSelect(styles, t, draft, setProvider, 'judgeProvider', 'provider', providerOptions, t('providerEmpty')),
+        judgeModelField(styles, t, draft, setField, modelOptions, t('modelEmpty')),
         fieldInput(styles, t, draft, setField, 'judgeTimeoutMs', 'timeoutMs'),
         fieldInput(styles, t, draft, setField, 'judgeMaxTokens', 'maxTokens'),
         fieldInput(styles, t, draft, setField, 'judgeConcurrency', 'concurrency'),
@@ -264,6 +308,74 @@ function fieldInput(styles, t, draft, setField, name, labelKey) {
       value: draft[name],
       onChange: (e) => setField(name, e.target.value),
     }));
+}
+
+/**
+ * A labeled <select> whose first option is always the "unconfigured" empty
+ * value, followed by the catalog options ({ id, label? }). The empty option
+ * doubles as the "clear back to composition base" choice.
+ */
+function fieldSelect(styles, t, draft, onChange, name, labelKey, options, emptyLabel) {
+  return h('div', { style: styles.row },
+    h('label', { style: styles.fieldLabel }, t(labelKey)),
+    h('select', {
+      style: styles.select,
+      value: draft[name],
+      onChange: (e) => onChange(e.target.value),
+    },
+      h('option', { key: 'empty', value: '' }, emptyLabel),
+      options.map((o) => h('option', { key: o.id, value: o.id }, o.label != null && o.label !== '' ? o.label : o.id))));
+}
+
+/**
+ * Judge model field: a catalog-driven <select> when the selected provider's
+ * group lists models (and the draft value is one of them, or empty); a plain
+ * text input when there is no directory (llm face absent / fetch failed /
+ * unknown provider) or the stored value is unknown.
+ */
+function judgeModelField(styles, t, draft, setField, modelOptions, emptyLabel) {
+  if (modelOptions.length === 0) {
+    return fieldInput(styles, t, draft, setField, 'judgeModel', 'model');
+  }
+  const known = draft.judgeModel === '' || modelOptions.some((o) => o.id === draft.judgeModel);
+  if (!known) {
+    return fieldInput(styles, t, draft, setField, 'judgeModel', 'model');
+  }
+  return fieldSelect(styles, t, draft, (v) => setField('judgeModel', v), 'judgeModel', 'model', modelOptions, emptyLabel);
+}
+
+/** Read-only per-preset hint block: level table + error/unsure fallbacks + prompt summary. */
+function presetInfoBlock(styles, t, preset) {
+  return h('div', { style: styles.presetInfo },
+    h('div', { style: styles.row },
+      h('label', { style: styles.fieldLabel }, t('presetLevels')),
+      h('div', { style: styles.presetTable },
+        presetRow(styles, t, t('workspaceWrite'), preset.levels.workspaceWrite),
+        presetRow(styles, t, t('dangerFullAccess'), preset.levels.dangerFullAccess),
+        presetRow(styles, t, t('presetErrorFallback'), preset.fallbackError),
+        presetRow(styles, t, t('presetUnsureFallback'), preset.fallbackUnsure))),
+    h('div', { style: styles.row },
+      h('label', { style: styles.fieldLabel }, t('presetPrompt')),
+      h('p', { style: styles.presetPromptText }, preset.prompt)));
+}
+
+/** One row of the preset level table; the 'custom' marker reads the user's levels table. */
+function presetRow(styles, t, label, value) {
+  return h('div', { style: styles.presetRow },
+    h('span', null, label),
+    h('span', { style: styles.presetValue }, value === 'custom' ? t('presetCustom') : value));
+}
+
+/**
+ * True when modelId belongs to the provider's catalog group. When the provider
+ * has no catalog group (unknown provider / directory missing) membership
+ * cannot be judged — keep the value rather than clobbering a typed model.
+ */
+function modelBelongsTo(providerId, modelId, groups) {
+  if (!providerId || !modelId) return true;
+  const group = (Array.isArray(groups) ? groups : []).find((g) => g && g.id === providerId);
+  if (!group || !Array.isArray(group.models)) return true;
+  return group.models.some((m) => m && m.id === modelId);
 }
 
 /** Parse the levels textarea, tolerating a blank/whitespace value (treated as none). */

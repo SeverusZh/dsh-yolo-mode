@@ -35,7 +35,12 @@ export function apply(ctx) {
   if (connection === undefined || connection === null) return;
 
   const t = ctx.locale.bind(NS);
-  const store = new YoloStore({ rpc: connection.rpc });
+  const store = new YoloStore({
+    rpc: connection.rpc,
+    // The provider/model directory rides connection.api.llm (mirroring the
+    // reference subagent-director client); older transports may lack `api`.
+    llm: connection.api ? connection.api.llm : null,
+  });
   // The store is a bare observable (subscribe/getSnapshot) → bind it directly.
   const useSnapshot = bindSnapshotSelector(store);
 
@@ -46,6 +51,9 @@ export function apply(ctx) {
     };
     const disposers = [
       ctx.remote == null ? () => {} : ctx.remote.$on('settings/document-updated', refresh),
+      // Provider topology changed → refresh so the provider/model selects
+      // reflect the live adapter registry.
+      ctx.remote == null ? () => {} : ctx.remote.$on('llm/adapters-updated', () => void store.load()),
       ctx.on('connection/reset', () => void store.load()),
     ];
     return () => {

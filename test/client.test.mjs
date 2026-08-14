@@ -31,6 +31,7 @@ import {
   classifyMutateError,
 } from '../src/client/store-logic.js'
 import { YoloStore } from '../src/client/store.js'
+import { PRESETS_INFO, presetInfo } from '../src/client/presets.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CLIENT_PATH = path.join(__dirname, '..', 'lib', 'client', 'index.js')
@@ -140,6 +141,14 @@ function statusOk(status) {
   return { ok: true, value: status }
 }
 
+/** 构造一个假 llm face（connection.api.llm）：返回 { result: { ok, value } } 信封。 */
+function makeFakeLlm({ providers = [], groups = [] } = {}) {
+  return {
+    providers: async () => ({ result: { ok: true, value: { providers } } }),
+    models: async () => ({ result: { ok: true, value: { groups } } }),
+  }
+}
+
 test('YoloStore: load 成功 → status ready, 取 revision, subscribe 同步通知', async () => {
   const rpc = makeFakeRpc({
     settingsView: () => viewOk({ ns: 'yolo-mode', revision: 5, value: { preset: 'yolo' }, secrets: [] }),
@@ -158,6 +167,9 @@ test('YoloStore: load 成功 → status ready, 取 revision, subscribe 同步通
   assert.equal(store.getSnapshot().writable, true)
   assert.equal(store.getSnapshot().view.value.preset, 'yolo')
   assert.equal(store.getSnapshot().statusInfo.preset, 'yolo')
+  // 未提供 llm face → 目录保持空数组
+  assert.deepEqual(store.getSnapshot().providers, [])
+  assert.deepEqual(store.getSnapshot().models, [])
   assert.ok(notified >= 1, 'load 期间应多次同步通知')
 })
 
@@ -282,6 +294,113 @@ test('YoloStore: togglePopup 翻转 open 并同步通知', () => {
   store.togglePopup()
   assert.equal(store.getSnapshot().open, false)
   assert.ok(count >= 2)
+})
+
+test('YoloStore: fake llm 下 load 拉取 providers/models 并写入快照', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 3, value: { preset: 'balanced' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  })
+  const llm = makeFakeLlm({
+    providers: [
+      { provider: 'deepseek-official', displayName: 'DeepSeek Official', settingsNs: 'modelProvider.deepseekOfficial', settingsPath: [], active: true },
+      { provider: 'openai', displayName: 'OpenAI', settingsNs: 'modelProvider.openai', settingsPath: [], active: false },
+    ],
+    groups: [
+      { id: 'deepseek-official', name: 'DeepSeek Official', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' }, { id: 'deepseek-r1', name: 'DeepSeek R1' }] },
+      { id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-4o', name: 'GPT-4o' }] },
+    ],
+  })
+  const store = new YoloStore({ rpc, llm })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.status, 'ready')
+  assert.equal(snap.providers.length, 2)
+  assert.equal(snap.providers[0].provider, 'deepseek-official')
+  assert.equal(snap.providers[0].displayName, 'DeepSeek Official')
+  assert.equal(snap.models.length, 2)
+  assert.equal(snap.models[0].id, 'deepseek-official')
+  assert.equal(snap.models[0].models[0].id, 'deepseek-v4-flash')
+  assert.equal(snap.models[1].models[0].id, 'gpt-4o')
+})
+
+test('YoloStore: llm 目录失败不致命 → 置空数组且 status 仍 ready', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'off' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'off' }),
+  })
+  // providers 抛错、models 返回 result.ok=false → 都视为目录缺失
+  const llm = {
+    providers: async () => { throw new Error('directory boom') },
+    models: async () => ({ result: { ok: false, error: { code: 'internal', message: 'x' } } }),
+  }
+  const store = new YoloStore({ rpc, llm })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.status, 'ready', '目录失败不应把 status 打 error')
+  assert.deepEqual(snap.providers, [])
+  assert.deepEqual(snap.models, [])
+})
+
+test('YoloStore: 目录失败但 bridge 失败 → status error（目录不背锅也不掩盖）', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => ({ ok: false, error: { code: 'internal', message: 'bridge boom' } }),
+    statusView: () => statusOk({ preset: 'off' }),
+  })
+  const llm = makeFakeLlm({ providers: [{ provider: 'p', displayName: 'P' }] })
+  const store = new YoloStore({ rpc, llm })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.status, 'error')
+  assert.equal(snap.error, 'internal')
+  // 即使 bridge 失败，目录仍写入快照（页面可在错误态展示可用 provider）
+  assert.equal(snap.providers.length, 1)
+  assert.deepEqual(snap.models, [])
+})
+
+// ---------------------------------------------------------------------------
+// presets.js 展示数据
+// ---------------------------------------------------------------------------
+
+test('presets.js: PRESETS_INFO 六项齐全且层级表对齐 design 文档预设表', () => {
+  assert.equal(PRESETS_INFO.length, 6)
+  assert.deepEqual(PRESETS_INFO.map((p) => p.id), ['off', 'strict', 'balanced', 'permissive', 'yolo', 'custom'])
+  const byId = Object.fromEntries(PRESETS_INFO.map((p) => [p.id, p]))
+
+  assert.deepEqual(byId.off.levels, { workspaceWrite: 'delegate', dangerFullAccess: 'delegate' })
+  assert.equal(byId.off.fallbackError, 'delegate')
+  assert.equal(byId.off.fallbackUnsure, 'delegate')
+
+  assert.deepEqual(byId.strict.levels, { workspaceWrite: 'judge', dangerFullAccess: 'delegate' })
+  assert.equal(byId.strict.fallbackError, 'rejected')
+  assert.equal(byId.strict.fallbackUnsure, 'delegate')
+
+  assert.deepEqual(byId.balanced.levels, { workspaceWrite: 'judge', dangerFullAccess: 'judge' })
+  assert.equal(byId.balanced.fallbackError, 'delegate')
+  assert.equal(byId.balanced.fallbackUnsure, 'delegate')
+
+  assert.deepEqual(byId.permissive.levels, { workspaceWrite: 'judge', dangerFullAccess: 'judge' })
+  assert.equal(byId.permissive.fallbackError, 'delegate')
+  assert.equal(byId.permissive.fallbackUnsure, 'allowed-once')
+
+  assert.deepEqual(byId.yolo.levels, { workspaceWrite: 'allow', dangerFullAccess: 'allow' })
+
+  // custom：策略/回退均为用户层级表（'custom' 标记）
+  assert.equal(byId.custom.levels.workspaceWrite, 'custom')
+  assert.equal(byId.custom.levels.dangerFullAccess, 'custom')
+  assert.equal(byId.custom.fallbackError, 'custom')
+  assert.equal(byId.custom.fallbackUnsure, 'custom')
+
+  // 每项都有非空一句话 prompt 摘要
+  for (const p of PRESETS_INFO) {
+    assert.ok(typeof p.prompt === 'string' && p.prompt.length > 0, p.id + ' 应有 prompt 摘要')
+  }
+})
+
+test('presets.js: presetInfo 按 id 查找', () => {
+  assert.equal(presetInfo('balanced').id, 'balanced')
+  assert.equal(presetInfo('yolo').levels.dangerFullAccess, 'allow')
+  assert.equal(presetInfo('nope'), null)
 })
 
 // ---------------------------------------------------------------------------
@@ -519,6 +638,137 @@ test('构建产物: SettingsSection ready 时按 writable 禁用保存按钮', a
   assert.ok(save2, '只读 ready 渲染仍包含保存按钮')
   assert.equal(save2.props.disabled, true)
 })
+
+test('构建产物: SettingsSection 在含 providers/models 快照下渲染 provider/model 为 select', async () => {
+  const mod = loadBundle()
+  const { state, ctx } = createFakeCtx()
+  mod.apply(ctx)
+  const injected = state.registered[0].opts.inject()
+  const t = injected.t
+  const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
+
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({
+      ns: 'yolo-mode', revision: 2,
+      value: { preset: 'balanced', modes: [], levels: {}, judge: { provider: 'deepseek-official', model: 'deepseek-v4-flash' } },
+      secrets: [],
+    }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  })
+  const llm = makeFakeLlm({
+    providers: [
+      { provider: 'deepseek-official', displayName: 'DeepSeek Official' },
+      { provider: 'openai', displayName: 'OpenAI' },
+    ],
+    groups: [
+      { id: 'deepseek-official', name: 'DeepSeek Official', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' }, { id: 'deepseek-r1', name: 'DeepSeek R1' }] },
+      { id: 'openai', name: 'OpenAI', models: [{ id: 'gpt-4o', name: 'GPT-4o' }] },
+    ],
+  })
+  const store = new YoloStore({ rpc, llm })
+  await store.load()
+  assert.equal(store.getSnapshot().status, 'ready')
+
+  const el = state.registered[0].renderer({ store, useSnapshot: snapOf(store), t })
+  assert.ok(el, 'ready 渲染应返回元素')
+
+  // provider 字段 → select，含留空选项与目录中的 providers
+  const providerRow = findFieldByLabel(el, t('provider'))
+  assert.ok(providerRow, 'provider 字段应存在')
+  const providerSelect = firstChildOfType(providerRow, 'select')
+  assert.ok(providerSelect, 'provider 应渲染为 select 元素')
+  const providerValues = optionValues(providerSelect)
+  assert.ok(providerValues.includes(''), 'provider select 含"未配置"留空选项')
+  assert.ok(providerValues.includes('deepseek-official'), 'provider select 含目录 provider')
+  assert.ok(providerValues.includes('openai'), 'provider select 含第二个 provider')
+
+  // model 字段 → select，仅含当前 provider 组的模型
+  const modelRow = findFieldByLabel(el, t('model'))
+  assert.ok(modelRow, 'model 字段应存在')
+  const modelSelect = firstChildOfType(modelRow, 'select')
+  assert.ok(modelSelect, 'model 应渲染为 select 元素')
+  const modelValues = optionValues(modelSelect)
+  assert.ok(modelValues.includes('deepseek-v4-flash'), 'model select 含当前 provider 组模型')
+  assert.ok(modelValues.includes('deepseek-r1'), 'model select 含当前 provider 组全部模型')
+  assert.ok(!modelValues.includes('gpt-4o'), 'model select 不含其他 provider 的模型')
+
+  // 预设层级表 + prompt 摘要只读块渲染
+  const levelsLabel = firstChildOfType(el, 'label', (node) => flattenText(node) === t('presetLevels'))
+  assert.ok(levelsLabel, 'preset 层级表标签应渲染')
+  const promptLabel = firstChildOfType(el, 'label', (node) => flattenText(node) === t('presetPrompt'))
+  assert.ok(promptLabel, 'preset 提示词标签应渲染')
+  const fullText = flattenText(el)
+  assert.ok(fullText.includes('judge'), '层级表展示 workspace-write/danger-full-access 策略')
+  assert.ok(fullText.includes('delegate'), '层级表展示 error/unsure 回退')
+})
+
+test('构建产物: SettingsSection 无目录（llm 缺失）时 model 退回文本输入', async () => {
+  const mod = loadBundle()
+  const { state, ctx } = createFakeCtx()
+  mod.apply(ctx)
+  const injected = state.registered[0].opts.inject()
+  const t = injected.t
+  const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
+
+  const store = new YoloStore({ rpc: makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', judge: { provider: '', model: 'manual-model' } }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  }) })
+  await store.load()
+
+  const el = state.registered[0].renderer({ store, useSnapshot: snapOf(store), t })
+  const modelRow = findFieldByLabel(el, t('model'))
+  assert.ok(modelRow, 'model 字段应存在')
+  const modelInput = firstChildOfType(modelRow, 'input')
+  assert.ok(modelInput, '无目录时 model 应退回文本输入')
+  assert.equal(modelInput.props.value, 'manual-model')
+})
+
+/** 在元素树中按扁平文案查找字段行（div 下第一个 label 文案匹配）。 */
+function findFieldByLabel(el, labelText) {
+  let found = null
+  const walk = (node) => {
+    if (found !== null || node === null || node === undefined) return
+    if (typeof node === 'string' || typeof node === 'number') return
+    if (node.type === 'div' && Array.isArray(node.children)) {
+      const label = node.children.find((c) => c && typeof c === 'object' && c.type === 'label')
+      if (label && flattenText(label) === labelText) {
+        found = node
+        return
+      }
+    }
+    for (const k of flattenChildren(node)) walk(k)
+  }
+  walk(el)
+  return found
+}
+
+/** 深度优先查找第一个指定 type 的元素（可带谓词）。 */
+function firstChildOfType(el, type, predicate) {
+  if (el === null || el === undefined || typeof el === 'string' || typeof el === 'number') return null
+  if (el.type === type && (!predicate || predicate(el))) return el
+  for (const k of flattenChildren(el)) {
+    const found = firstChildOfType(k, type, predicate)
+    if (found) return found
+  }
+  return null
+}
+
+/**
+ * 展平一个元素的所有后代子节点（含 React 风格的嵌套 children 数组，如
+ * `.map()` 产出的选项列表）。fake React 不自动展平，这里显式处理。
+ */
+function flattenChildren(node) {
+  if (node === null || node === undefined || typeof node === 'string' || typeof node === 'number') return []
+  return (Array.isArray(node.children) ? node.children : [node.children]).flat(Infinity)
+}
+
+/** 收集一个 select 元素所有 option 的 value。 */
+function optionValues(selectEl) {
+  return flattenChildren(selectEl)
+    .filter((c) => c && c.type === 'option')
+    .map((c) => c.props.value)
+}
 
 /** 在元素树中按扁平文案查找第一个 button 元素。 */
 function findButtonByText(el, text) {

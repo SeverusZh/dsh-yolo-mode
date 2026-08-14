@@ -16,7 +16,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { JUDGE_ERROR_CODES, JudgeError, createJudge } from '../lib/judge.js'
+import { JUDGE_ERROR_CODES, JudgeError, createJudge, defaultJudgePromptFor, DEFAULT_SYSTEM_PROMPT } from '../lib/judge.js'
 
 /**
  * 把一段文本按 BlockAssembler 分片协议组装成完整 chunk 序列。
@@ -299,4 +299,64 @@ test('正常完结后信号量释放，后续调用仍可进入', async () => {
   // 第二次仍可进入（首个已释放，未触发 OVERLOAD）。
   const out = await judge(makeInput({ justification: 'b' }))
   assert.equal(out.decision, 'allow')
+})
+
+// ---------------------------------------------------------------------------
+// 9) defaultJudgePromptFor：每预设默认裁判提示词（design.md §13.1）
+// ---------------------------------------------------------------------------
+test('defaultJudgePromptFor 六预设：off/yolo 空串，其余非空且含「存疑」或 deny/unsure 字样', () => {
+  // 确定性预设不调裁判 → 空串占位。
+  assert.equal(defaultJudgePromptFor('off'), '')
+  assert.equal(defaultJudgePromptFor('yolo'), '')
+  // 其余预设：非空且含存疑即 deny/unsure 的表述。
+  for (const preset of ['strict', 'balanced', 'permissive', 'custom']) {
+    const prompt = defaultJudgePromptFor(preset)
+    assert.ok(typeof prompt === 'string' && prompt.length > 0, `${preset} 提示词应为非空字符串`)
+    assert.ok(
+      prompt.includes('存疑') || (prompt.includes('deny') && prompt.includes('unsure')),
+      `${preset} 提示词应含「存疑」或 deny/unsure 字样`,
+    )
+  }
+})
+
+test('defaultJudgePromptFor balanced 返回 DEFAULT_SYSTEM_PROMPT（不变）', () => {
+  assert.equal(defaultJudgePromptFor('balanced'), DEFAULT_SYSTEM_PROMPT)
+  // DEFAULT_SYSTEM_PROMPT 仍保留三条防回环要求。
+  assert.ok(DEFAULT_SYSTEM_PROMPT.includes('存疑'))
+  assert.ok(DEFAULT_SYSTEM_PROMPT.includes('你不是发起方 agent'))
+})
+
+test('defaultJudgePromptFor 未知预设回退 DEFAULT_SYSTEM_PROMPT', () => {
+  assert.equal(defaultJudgePromptFor('no-such-preset'), DEFAULT_SYSTEM_PROMPT)
+  assert.equal(defaultJudgePromptFor(undefined), DEFAULT_SYSTEM_PROMPT)
+  assert.equal(defaultJudgePromptFor(null), DEFAULT_SYSTEM_PROMPT)
+})
+
+// ---------------------------------------------------------------------------
+// 10) createJudge：systemPrompt 优先级（显式优先，空则内置默认）
+// ---------------------------------------------------------------------------
+test('createJudge：显式 systemPrompt 原样传给 llm.stream（用户显式优先）', async () => {
+  let captured
+  const llm = fakeLlm(async function* (options) {
+    captured = options
+    yield* textChunks('{"decision":"allow","reason":"ok"}')
+  })
+  const judge = createJudge({
+    llm, provider: 'p', model: 'm', systemPrompt: 'EXPLICIT_PROMPT', timeoutMs: 2000, maxTokens: 16, concurrency: 1,
+  })
+  await judge(makeInput())
+  assert.equal(captured.system, 'EXPLICIT_PROMPT')
+})
+
+test('createJudge：systemPrompt 为空 → 使用内置 DEFAULT_SYSTEM_PROMPT', async () => {
+  let captured
+  const llm = fakeLlm(async function* (options) {
+    captured = options
+    yield* textChunks('{"decision":"deny","reason":"no"}')
+  })
+  const judge = createJudge({
+    llm, provider: 'p', model: 'm', systemPrompt: '', timeoutMs: 2000, maxTokens: 16, concurrency: 1,
+  })
+  await judge(makeInput())
+  assert.equal(captured.system, DEFAULT_SYSTEM_PROMPT)
 })

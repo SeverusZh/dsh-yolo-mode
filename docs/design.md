@@ -343,3 +343,28 @@ scripts/build-client.mjs  rolldown 构建脚本（对齐参考 scripts/build-cli
 
 - web profile patch 追加桥接行（安装步骤，主管执行）：`- insert: [{ id: yolo-mode-bridge, name: dsh-yolo-mode/bridge }]`。
 - **重启 DSH + 刷新浏览器**后验收：输入栏 chip、设置页「YOLO 审批」、`POST /yolo-mode/settingsView` 正常应答。
+
+## 13. v0.4.0：模型下拉选择 + 每预设默认提示词
+
+### 13.1 每预设默认裁判提示词（宿主）
+
+- `lib/judge.js` 新增 `defaultJudgePromptFor(preset)`（导出）：返回该预设的默认裁判 system prompt；`DEFAULT_SYSTEM_PROMPT` 保留为 balanced 的提示词。映射：
+  - `off` / `yolo`：确定性预设不调裁判，返回空串（占位）；
+  - `strict`：最保守审计者——除最小作用范围的 workspace-write 外几乎总拒绝，danger-full-access 一律拒绝，存疑即 deny；
+  - `balanced`（默认）：现有审计者 prompt（存疑 deny/unsure、防回环、只依据事实）；
+  - `permissive`：宽松审计者——理由合理且作用范围可接受即倾向 allow，仅明显破坏性/供应链风险拒绝；
+  - `custom`：按用户自定义层级表裁决——对照层级表中该工具+目标模式的策略，事实相符则按其倾向，存疑按层级表回退。
+- `lib/index.js` 的 `getJudge()`：`systemPrompt = cfg.judge.systemPrompt || defaultJudgePromptFor(cfg.preset)`（用户显式 systemPrompt 优先；否则按预设取默认）。
+- 测试：`test/judge.test.mjs` 增 `defaultJudgePromptFor` 六预设非空/占位断言 + 自定义 systemPrompt 优先。
+
+### 13.2 模型下拉选择（客户端）
+
+- `src/client/store.js`（YoloStore）：构造入参改为 `{rpc, llm}`；`load()` 并行拉取 `llm.providers({})`、`llm.models({})`（`@deepseek-ai/dsh-client-connection` 的 `connection.api.llm`，返回 `{result:{ok,value:{providers}}}` / `{result:{ok,value:{groups}}}`，镜像参考 store.ts）+ 原 settingsView/statusView；快照增 `providers`、`models`（`ModelProviderGroup[]`，`{id, models:[{id,...}]}`）。
+- `src/client/index.js`：`new YoloStore({ rpc: connection.rpc, llm: connection.api.llm })`；失效订阅增 `ctx.remote.$on('llm/adapters-updated', refresh)`。
+- `src/client/ui/SettingsSection.js`：judge provider 字段改为 `<select>`（选项来自 `state.providers`，保留"留空=未配置"）；judge model 字段改为 `<select>`（选项来自当前 provider 对应 `state.models` 组的 models；无目录/未知值时空文本输入兜底）；选择 provider 后若 model 不再属于该 provider 则清空 model。
+- 新增 `src/client/presets.js`：每预设的层级表 + 默认提示词摘要（静态展示数据，含 workspace-write/danger-full-access 策略、error/unsure 回退、一句话提示词说明）；设置页在 preset 下拉旁展示所选预设的层级表 + 提示词摘要（只读提示，不参与保存）。
+- 重建 bundle + 测试：`test/client.test.mjs` 增 store 拉取 llm 目录、provider/model 下拉渲染（fake llm）、每预设提示摘要存在。
+
+### 13.3 文档
+
+- README 增"每预设层级表与默认提示词"章节（六预设 × {workspace-write 策略, danger-full-access 策略, error 回退, unsure 回退, 默认提示词摘要}）。
