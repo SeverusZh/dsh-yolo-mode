@@ -59,7 +59,25 @@ test('validateYoloSettings: judge.timeoutMs 非正整数抛错', () => {
 
 test('validateYoloSettings: modes 非法抛错', () => {
   assert.throws(() => validateYoloSettings({ modes: ['quantum'] }), /非法沙箱模式/)
-  assert.throws(() => validateYoloSettings({ modes: [] }), /modes/)
+})
+
+test('validateYoloSettings: 空 modes 视为未设 → 回落默认（schema 默认空数组容错）', () => {
+  const cfg = validateYoloSettings({ modes: [] })
+  assert.deepEqual(cfg.modes, ['workspace-write'])
+})
+
+test('validateYoloSettings: 回归——schema 解析形状（空集合默认 + 部分 judge）不抛错', () => {
+  // 注册时 resolve(base+默认值) 的形状：array/dict 缺省为 []/{}，标量缺省 absent
+  const cfg = validateYoloSettings({
+    preset: 'balanced',
+    modes: [],
+    levels: {},
+    judge: { provider: 'opencode-go', model: 'deepseek-v4-flash', concurrency: 2 },
+  })
+  assert.equal(cfg.preset, 'balanced')
+  assert.deepEqual(cfg.modes, ['workspace-write'])
+  assert.equal(cfg.judge.provider, 'opencode-go')
+  assert.equal(cfg.judge.timeoutMs, 20000) // 缺失字段回落 normalizeConfig 默认
 })
 
 test('validateYoloSettings: 输出为冻结对象', () => {
