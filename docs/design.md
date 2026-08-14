@@ -204,3 +204,15 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 2. 向 `$DSH_HOME/profiles/web/cordis.patch.yml` 追加 `insert` 行（见 §0 表；id `yolo-mode`、name `dsh-yolo-mode`、config 示例 preset `balanced`）。
 3. `dsh web --dump-config` 离线校验组合。
 4. `cordis.patch.yml` 由 `watchUserPatches` 热重载，新行保存后即挂入运行中的宿主（2026-08-14 实测：`include:yolo-mode` fiber state=ACTIVE、error=null，无需重启）；若加载失败宿主保留上一棵好树。重启 DSH 始终是兜底。E2E：在 `workspace-write + ask` 的新会话触发真实升权，验证裁判放行 / 转人工 / 失败回退三条路径。
+
+## 10. 已完成的验证记录（2026-08-14）
+
+| 验证项 | 方法 | 结果 |
+|---|---|---|
+| 单元测试 | `npm test`（node --test，假 llm） | 47/47 全绿（policy 29 + judge 18） |
+| 流水线冒烟 | 真实 policy/judge/index 模块 + 假流 | 10/10 通过（含四态裁决、回退、审计、实参扫描） |
+| 组合解析 | `dsh --profile web --dump-config` | 退出码 0，yolo-mode 行配置正确 |
+| 活动树挂载 | 动态探针枚举 `ctx.loader.entries()` | `include:yolo-mode` fiber **ACTIVE**(2)、error=null |
+| 真实 LLM 裁判路由 | 动态探针以 `opencode-go/deepseek-v4-flash` + 内置防回环 prompt 流式裁决 | 合法 JSON 输出，越界写入被正确 **deny**（fail-closed 实证） |
+
+**遗留**：真实升权 seam 触发的三路径 E2E 需用户在 `workspace-write + ask` 会话触发（本会话为 `never` 策略，seam 在瀑布前拒绝，插件天然不介入）。审计日志：`%TEMP%\dsh-yolo\judge.log`。
