@@ -1,0 +1,12 @@
+# dsh-yolo-mode bundle patch.
+#
+# Adds the plugin's two entries: the main entry and the settings bridge that
+# exposes the `yolo-mode` settings namespace to the Web UI.
+# Install: dsh plugin --profile <name> add dsh-yolo-mode
+# Restart `dsh --profile <name>` after installing.
+- insert:
+    - id: yolo-mode
+      name: dsh-yolo-mode
+- insert:
+    - id: yolo-mode-bridge
+      name: dsh-yolo-mode/bridge

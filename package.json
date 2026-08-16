@@ -12,7 +12,8 @@
   },
   "files": [
     "lib",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "cordis.patch.yml"
   ],
   "repository": {
     "type": "git",
@@ -60,6 +61,9 @@
     "test": "node --test"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [
