@@ -31,23 +31,24 @@ dsh plugin --profile web add dsh-yolo-mode
 dsh plugin --profile web add <项目绝对路径>
 ```
 
-### 2. 追加两行到 profile patch
+### 2.（可选）覆盖插件配置
 
-编辑 `$DSH_HOME/profiles/web/cordis.patch.yml`，追加两个 `insert` 元素（主条目 + 设置桥接条目）：
+`dsh plugin add` 会通过插件包自带的 `cordis.patch.yml` 自动挂载 `yolo-mode` 与
+`yolo-mode-bridge` 两个入口，**不需要**再手动 `insert`。需要调整配置时，在
+`$DSH_HOME/profiles/web/cordis.patch.yml` 里按 id 覆盖主条目即可：
 
 ```yaml
-- insert:
-    - id: yolo-mode
-      name: dsh-yolo-mode
-      config:
-        preset: balanced
-        judge:
-          provider: <provider>
-          model: <model>
-- insert:
-    - id: yolo-mode-bridge
-      name: dsh-yolo-mode/bridge
+- id: yolo-mode
+  name: dsh-yolo-mode
+  config:
+    preset: balanced
+    judge:
+      provider: <provider>
+      model: <model>
 ```
+
+> 注意：不要再用 `- insert:` 添加 `yolo-mode` / `yolo-mode-bridge`，否则启动会报
+> `duplicate loader entry id: yolo-mode`。
 
 重启 DSH 并刷新浏览器后生效。
 
