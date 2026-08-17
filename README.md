@@ -52,6 +52,14 @@ dsh plugin --profile web add <项目绝对路径>
 
 重启 DSH 并刷新浏览器后生效。
 
+### 安装注意事项
+
+- 推荐直接 `dsh plugin --profile web add dsh-yolo-mode`（npm 发布版已包含构建产物，
+  peer 依赖由 DSH 的 `$DSH_HOME/profiles/node_modules` fallback 提供，开箱即用）。
+- 本地 `link:` 开发时，checkout 需位于 `$DSH_HOME/profiles/` 下（或仓库自带
+  node_modules），否则 `@deepseek-ai/*` peer 依赖会因 Node 按真实路径解析而报
+  `ERR_MODULE_NOT_FOUND`。
+
 ## 配置
 
 插件行 `config` 全字段可选，未填按默认值：
