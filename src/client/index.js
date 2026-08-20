@@ -12,7 +12,7 @@ import { YoloStore } from './store.js';
 import { SettingsSection } from './ui/SettingsSection.js';
 import { Chip } from './ui/Chip.js';
 import { Popup } from './ui/Popup.js';
-import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react';
+import { bindSnapshotSelector } from './bind.js';
 
 /**
  * Services required by these slot registrations (dsh.client.inject is the same

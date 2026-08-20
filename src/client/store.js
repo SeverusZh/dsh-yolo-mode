@@ -7,9 +7,9 @@
  * invalidations (settings/document-updated, connection/reset) refresh the page.
  *
  * The store is a bare observable (implements subscribe/getSnapshot) so it can
- * be bound directly by `bindSnapshotSelector` (dsh-client-web-react); the
- * popup open/closed flag is also held here so the chip and the overlay share
- * one source of truth.
+ * be bound directly by `bindSnapshotSelector` (see ./bind.js); the popup
+ * open/closed flag is also held here so the chip and the overlay share one
+ * source of truth.
  */
 import {
   advanceRevision,
