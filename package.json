@@ -1,6 +1,6 @@
 {
   "name": "dsh-yolo-mode",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "dsh-yolo-mode —— DeepSeek Harness 双面包插件：当会话处于可写沙箱模式且审批策略为 ask 时，用大模型自动裁决沙箱升权申请，支持内置预设与自定义权限层级，并提供宿主 settings + 自发布设置桥（/yolo-mode）与 Web 客户端 UI。",
   "type": "module",
   "main": "lib/index.js",
