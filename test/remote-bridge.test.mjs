@@ -3,7 +3,8 @@
  *
  * 覆盖 design.md §12.4/12.7：信封处理器（fake req/res + fake settings seam）
  * 的 404/415/403/400/200-bad-request×2、settingsView 装配、
- * settingsMutate 成功/conflict/rejected、statusView 装配。
+ * settingsMutate 成功/conflict/rejected、statusView 装配、openLogFile
+ * （存在 → 注入 openFile 被调 / 不存在 → log-not-found / 默认路径回落）。
  *
  * fake settings seam：{writable, describe:()=>[view], mutate: async (ns,ops,rev)=>{...}}，
  * conflict 场景抛 @deepseek-ai/dsh-settings 的 SettingsConflictError 实例。
@@ -13,6 +14,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
 
@@ -21,6 +25,7 @@ import {
   YOLO_RPC_VIEW,
   YOLO_RPC_MUTATE,
   YOLO_RPC_STATUS,
+  YOLO_RPC_OPEN_LOG,
   handleYoloBridgeRequest,
 } from '../lib/remote.js'
 import { YOLO_SETTINGS_NAMESPACE } from '../lib/settings.js'
@@ -339,6 +344,73 @@ test('statusView → 200 getStatusPayload() 装配结果', async () => {
 })
 
 /* ------------------------------------------------------------------ *
+ * openLogFile
+ * ------------------------------------------------------------------ */
+
+/** 临时目录里建一个真实存在的审计日志文件（测试后清理）。 */
+function makeTempLog() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-yolo-test-'))
+  const file = path.join(dir, 'judge.log')
+  fs.writeFileSync(file, '{"time":1}\n', 'utf8')
+  return { dir, file }
+}
+
+test('openLogFile 文件存在 → 200 ok，注入的 openFile 收到解析路径', async () => {
+  const { dir, file } = makeTempLog()
+  try {
+    const { settings } = makeFakeSettings({
+      view: makeView({ revision: 0, value: { preset: 'balanced', auditFile: file } }),
+    })
+    let opened = null
+    const openFile = async (target) => {
+      opened = target
+      return { ok: true, value: { path: target } }
+    }
+    const res = fakeRes()
+    await handleYoloBridgeRequest(
+      settings,
+      getStatusPayload,
+      fakeReq({ url: YOLO_RPC_CHANNEL + '/' + YOLO_RPC_OPEN_LOG, body: envelope(YOLO_RPC_OPEN_LOG, {}) }),
+      res,
+      openFile,
+    )
+    assert.equal(res.statusCode, 200)
+    const parsed = parseRes(res)
+    assert.equal(parsed.result.ok, true)
+    assert.equal(opened, file, 'openFile 应收到 settings view 解析出的 auditFile')
+    assert.equal(parsed.result.value.path, file)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('openLogFile 文件不存在 → 200 log-not-found（不调用 openFile）', async () => {
+  const missing = path.join(os.tmpdir(), 'dsh-yolo-test-missing-' + Date.now() + '.log')
+  const { settings } = makeFakeSettings({
+    view: makeView({ revision: 0, value: { preset: 'balanced', auditFile: missing } }),
+  })
+  let opened = null
+  const openFile = async (target) => {
+    opened = target
+    return { ok: true, value: { path: target } }
+  }
+  const res = fakeRes()
+  await handleYoloBridgeRequest(
+    settings,
+    getStatusPayload,
+    fakeReq({ url: YOLO_RPC_CHANNEL + '/' + YOLO_RPC_OPEN_LOG, body: envelope(YOLO_RPC_OPEN_LOG, {}) }),
+    res,
+    openFile,
+  )
+  assert.equal(res.statusCode, 200)
+  const parsed = parseRes(res)
+  assert.equal(parsed.result.ok, false)
+  assert.equal(parsed.result.error.code, 'log-not-found')
+  assert.equal(parsed.result.error.details.path, missing)
+  assert.equal(opened, null, '文件不存在时不应调用 openFile')
+})
+
+/* ------------------------------------------------------------------ *
  * 常量面
  * ------------------------------------------------------------------ */
 test('导出常量与命名空间一致', () => {
@@ -346,5 +418,6 @@ test('导出常量与命名空间一致', () => {
   assert.equal(YOLO_RPC_VIEW, 'settingsView')
   assert.equal(YOLO_RPC_MUTATE, 'settingsMutate')
   assert.equal(YOLO_RPC_STATUS, 'statusView')
+  assert.equal(YOLO_RPC_OPEN_LOG, 'openLogFile')
   assert.equal(String(YOLO_SETTINGS_NAMESPACE), NS)
 })

@@ -2,6 +2,21 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.5.0] - 2026-08-28
+
+### 新增
+
+- **决策表翻页**：状态弹窗的最近决策表改为分页展示（每页 5 条，倒序），新增「上一页 / 下一页」+ 页码指示（多页时显示）；刷新导致列表长度跨页边界时自动回到第一页。
+- **打开审计日志**：弹窗新增「打开日志」按钮，客户端经新 RPC 端点 `openLogFile` 请求宿主，用 OS 默认应用打开审计 JSONL（macOS `open` / Windows `cmd start` / Linux `xdg-open`）；文件尚不存在返回 `log-not-found`，UI 显示友好提示（含解析出的日志路径）。
+- **statusView 携带 auditFile**：生效审计日志路径随 statusView 返回（与主条目 `audit()` 同一解析规则），弹窗展示路径（按钮 title + 说明行）。
+- **lib/audit.js 新模块**：审计日志路径解析（`resolveAuditFile` / `defaultAuditFile` / `auditFileExists`）与 OS 打开（`openFileWithDefaultApp` / `openerCommandFor`）抽为独立宿主模块；主条目 `audit()` 与桥接 `openLogFile` 端点共用同一解析规则，杜绝路径不一致。
+
+### 测试
+
+- 新增 `test/audit.test.mjs`（路径解析 / 存在性 / 三平台打开命令）与 `test/state.test.mjs`（statusView 载荷装配含 auditFile）。
+- `test/remote-bridge.test.mjs` 增 `openLogFile` 端点用例：文件存在 → 注入 openFile 收到解析路径；不存在 → `log-not-found` 且不调用 openFile；端点常量。
+- `test/client.test.mjs` 增 `YoloStore.openLogFile` 转发用例与 Popup 分页渲染用例（20 条 → 5 条/页、翻页器、打开日志按钮与成功提示）。
+
 ## [0.4.0] - 2026-08-14
 
 ### 新增

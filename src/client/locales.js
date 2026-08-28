@@ -50,6 +50,16 @@ export const en = {
   statsDelegated: 'Delegated',
   refresh: 'Refresh',
   close: 'Close',
+  openLog: 'Open log',
+  openLogBusy: 'Opening…',
+  openLogOk: 'Log opened',
+  openLogFail: 'Could not open log',
+  logNotFound: 'The log file does not exist yet (no decisions recorded).',
+  logPath: 'Log file',
+
+  pagePrev: '‹ Prev',
+  pageNext: 'Next ›',
+  pageOf: 'Page {current} / {total}',
 
   tableTime: 'Time',
   tableTool: 'Tool',
@@ -103,6 +113,16 @@ export const zh = {
   statsDelegated: '转人工',
   refresh: '刷新',
   close: '关闭',
+  openLog: '打开日志',
+  openLogBusy: '打开中…',
+  openLogOk: '日志已打开',
+  openLogFail: '无法打开日志',
+  logNotFound: '日志文件尚不存在（还没有裁决记录）。',
+  logPath: '日志文件',
+
+  pagePrev: '‹ 上一页',
+  pageNext: '下一页 ›',
+  pageOf: '第 {current} / {total} 页',
 
   tableTime: '时间',
   tableTool: '工具',

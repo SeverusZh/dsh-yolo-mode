@@ -296,6 +296,26 @@ test('YoloStore: togglePopup 翻转 open 并同步通知', () => {
   assert.ok(count >= 2)
 })
 
+test('YoloStore: openLogFile 转发 openLogFile 端点并原样返回 RpcResult', async () => {
+  const ok = new YoloStore({
+    rpc: makeFakeRpc({
+      openLogFile: () => ({ ok: true, value: { path: '/tmp/dsh-yolo/judge.log' } }),
+    }),
+  })
+  const result = await ok.openLogFile()
+  assert.equal(result.ok, true)
+  assert.equal(result.value.path, '/tmp/dsh-yolo/judge.log')
+
+  const fail = new YoloStore({
+    rpc: makeFakeRpc({
+      openLogFile: () => ({ ok: false, error: { code: 'log-not-found', message: 'missing', details: {} } }),
+    }),
+  })
+  const result2 = await fail.openLogFile()
+  assert.equal(result2.ok, false)
+  assert.equal(result2.error.code, 'log-not-found')
+})
+
 test('YoloStore: fake llm 下 load 拉取 providers/models 并写入快照', async () => {
   const rpc = makeFakeRpc({
     settingsView: () => viewOk({ ns: 'yolo-mode', revision: 3, value: { preset: 'balanced' }, secrets: [] }),
@@ -643,6 +663,84 @@ test('构建产物: 渲染函数可调用且返回元素或 null', () => {
   assert.equal(chipEl.type, 'button')
   const chipText = flattenText(chipEl)
   assert.ok(chipText.startsWith('YOLO '))
+})
+
+test('构建产物: Popup 分页 + 打开日志（20 条 → 5 条/页，翻页器与日志按钮）', async () => {
+  const react = createStatefulFakeReact()
+  const mod = loadBundle(react)
+  const { state, ctx } = createFakeCtx()
+  mod.apply(ctx)
+  const t = state.registered[2].opts.inject().t
+  const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
+  const render = () => {
+    react.resetHooks() // render pass 边界
+    return state.registered[2].renderer({ store, useSnapshot: snapOf(store), t })
+  }
+
+  const recent = Array.from({ length: 20 }, (_, i) => ({
+    time: 1000 + i,
+    toolName: 'tool' + i,
+    targetMode: 'workspace-write',
+    decision: 'judge',
+    outcome: i % 2 === 0 ? 'allowed-once' : 'rejected',
+    reason: 'reason-' + i,
+  }))
+  const store = new YoloStore({
+    rpc: makeFakeRpc({
+      settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced' }, secrets: [] }),
+      statusView: () => statusOk({
+        preset: 'balanced',
+        stats: { total: 20, allowed: 10, rejected: 10, delegated: 0 },
+        recent,
+        auditFile: '/tmp/dsh-yolo/judge.log',
+      }),
+      openLogFile: () => ({ ok: true, value: { path: '/tmp/dsh-yolo/judge.log' } }),
+    }),
+  })
+  await store.load()
+  assert.equal(store.getSnapshot().status, 'ready')
+
+  // 未打开 → null
+  assert.equal(render(), null)
+  store.togglePopup()
+
+  // 第一页：5 行；翻页器可见；打开日志按钮与日志路径标题存在
+  let el = render()
+  assert.ok(el, '打开状态应渲染弹窗')
+  const tbody = firstChildOfType(el, 'tbody')
+  assert.ok(tbody, '决策表应渲染')
+  const firstRows = flattenChildren(tbody).filter((c) => c && c.type === 'tr')
+  assert.equal(firstRows.length, 5, '第一页应只渲染 PAGE_SIZE(5) 行')
+  assert.ok(flattenText(firstRows[0]).includes('tool0'), '第一页第一行是最新（第 0 条）')
+  assert.ok(flattenText(firstRows[4]).includes('tool4'), '第一页最后一行是第 4 条')
+
+  const prevBtn = findButtonByText(el, t('pagePrev'))
+  const nextBtn = findButtonByText(el, t('pageNext'))
+  assert.ok(prevBtn && nextBtn, '多页时应渲染上一页/下一页按钮')
+  assert.equal(prevBtn.props.disabled, true, '第一页时上一页禁用')
+  assert.equal(nextBtn.props.disabled, false)
+  assert.ok(flattenText(el).includes(t('pageOf')), '应渲染页码指示')
+
+  const openBtn = findButtonByText(el, t('openLog'))
+  assert.ok(openBtn, '应渲染打开日志按钮')
+  assert.equal(openBtn.props.title, '/tmp/dsh-yolo/judge.log', '按钮 title 应携带日志路径')
+  assert.ok(flattenText(el).includes(t('logPath')), '应渲染日志路径标题')
+
+  // 点击下一页 → 第二页显示第 5..9 条；上一页恢复可用
+  nextBtn.props.onClick()
+  el = render()
+  const tbody2 = firstChildOfType(el, 'tbody')
+  const secondRows = flattenChildren(tbody2).filter((c) => c && c.type === 'tr')
+  assert.equal(secondRows.length, 5)
+  assert.ok(flattenText(secondRows[0]).includes('tool5'), '第二页第一行是第 5 条')
+  const prevBtn2 = findButtonByText(el, t('pagePrev'))
+  assert.equal(prevBtn2.props.disabled, false, '非首页时上一页可用')
+
+  // 点击打开日志 → 成功提示（openLogOk）
+  findButtonByText(el, t('openLog')).props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 0)) // 等待异步 openLog 落定
+  el = render()
+  assert.ok(flattenText(el).includes(t('openLogOk')), '打开成功应显示提示')
 })
 
 test('构建产物: SettingsSection ready 时按 writable 禁用保存按钮', async () => {

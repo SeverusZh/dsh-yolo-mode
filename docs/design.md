@@ -368,3 +368,27 @@ scripts/build-client.mjs  rolldown 构建脚本（对齐参考 scripts/build-cli
 ### 13.3 文档
 
 - README 增"每预设层级表与默认提示词"章节（六预设 × {workspace-write 策略, danger-full-access 策略, error 回退, unsure 回退, 默认提示词摘要}）。
+
+## 14. v0.5.0：决策表翻页 + 打开审计日志
+
+### 14.1 决策表翻页（客户端）
+
+- `src/client/ui/Popup.js`：最近决策表分页展示，`PAGE_SIZE = 5`（每页 5 条，倒序）；多页时渲染「上一页 / 下一页」+ 页码指示（`pageOf`，`t(key, params)` 插值）；页数 ≤1 时不渲染翻页器。
+- 分页状态为组件内 `useState(page)`：`totalPages = ceil(recent.length / PAGE_SIZE)`，列表长度跨页边界（刷新）时 `useEffect` 回第一页；渲染时 `safePage = min(page, totalPages-1)` 夹取防越界。
+- Popup 拆为外层守卫（校验 slot inject face）+ 内层 `ReactPopup`（hooks 无条件执行），对齐 SettingsSection 的 guard/hook 拆分模式。
+
+### 14.2 打开审计日志（宿主 + 客户端）
+
+- **新模块 `lib/audit.js`**：审计日志路径的唯一解析来源——`resolveAuditFile(cfg)`（显式非空 `auditFile` 优先并 trim，否则 `defaultAuditFile()` = `%TEMP%/dsh-yolo/judge.log`）、`auditFileExists(file)`、`openerCommandFor(file, platform)`（darwin `open` / win32 `cmd /c start "" "<file>"` / 其余 `xdg-open`）、`openFileWithDefaultApp(file)`（detached + unref fire-and-forget；spawn 'error' → `{ok:false, code:'open-failed'}`，绝不抛出）。
+- **主条目 `lib/index.js`**：`audit()` 的 `auditFile()` 改用 `resolveAuditFile(effectiveConfig())`，与桥接端点同一解析规则。
+- **`lib/state.js`**：`getStatusPayload` 载荷新增 `auditFile`（resolveAuditFile(cfg)），客户端可展示/复用路径。
+- **`lib/remote.js` 新端点 `openLogFile`**：从 settings 的 yolo-mode resolved view 解析路径 → 文件不存在返回 `{ok:false, code:'log-not-found'}`（不创建、不弹错误框）→ 存在则调用注入的 `openFile`（缺省 `openFileWithDefaultApp`；`handleYoloBridgeRequest` 第 5 参可注入 fake 供单测）。
+- **客户端 `src/client/store.js`**：`openLogFile()` 经 `/yolo-mode` 通道调用 `openLogFile` 端点，原样返回 RpcResult。
+- **`src/client/ui/Popup.js`**：头部「打开日志」按钮（busy 态禁用），成功显示 `openLogOk` + 路径（4s 后自动清除），失败按错误码显示 `logNotFound` / `openLogFail` + 消息；`statusInfo.auditFile` 存在时展示「日志文件：<path>」说明行与按钮 title。
+
+### 14.3 测试
+
+- `test/audit.test.mjs`：路径解析（显式/trim/空白/缺失/非字符串回落默认）、存在性、三平台打开命令。
+- `test/state.test.mjs`：statusView 载荷装配含 auditFile（显式优先 / 默认回落）。
+- `test/remote-bridge.test.mjs`：`openLogFile` 存在 → 注入 openFile 收到解析路径；不存在 → `log-not-found` 且不调用 openFile；端点常量面。
+- `test/client.test.mjs`：`YoloStore.openLogFile` 转发；Popup 分页渲染（20 条 → 5 条/页、翻页器可用性、打开日志按钮 + 成功提示）。

@@ -23,6 +23,7 @@ export const YOLO_RPC_CHANNEL = '/yolo-mode';
 export const YOLO_RPC_VIEW = 'settingsView';
 export const YOLO_RPC_STATUS = 'statusView';
 export const YOLO_RPC_MUTATE = 'settingsMutate';
+export const YOLO_RPC_OPEN_LOG = 'openLogFile';
 
 /** Initial snapshot returned by a freshly constructed store. */
 export function initialYoloState() {
@@ -222,6 +223,16 @@ export class YoloStore {
       this.set({ conflicted: false, error: code === undefined ? 'settings-rejected' : code });
     }
     return { ok: false, kind, code };
+  }
+
+  /**
+   * Ask the host to open the audit JSONL log file with the OS default
+   * application. The host resolves the effective path (view.value.auditFile or
+   * the tmp default) and returns { ok: true, value: { path } } on success, or
+   * { ok: false, error: { code: 'log-not-found' | 'open-failed', … } }.
+   */
+  async openLogFile() {
+    return this._call(YOLO_RPC_OPEN_LOG, {});
   }
 
   /** Rebase the revision from a freshly loaded view without a full load. */

@@ -1,9 +1,16 @@
 /**
  * YOLO mode status popup (slot `shell.overlay`). Renders null while the store's
  * open flag is false; otherwise a stats card plus the recent decisions table
- * (≤20, newest first) and a refresh button.
+ * (paged, PAGE_SIZE per page, newest first), an "open audit log" button, and a
+ * refresh button.
+ *
+ * Guard/hook split mirrors SettingsSection: the outer component validates the
+ * slot inject face, the inner component owns all hooks unconditionally.
  */
-import { createElement as h } from 'react';
+import { useState, useEffect, createElement as h } from 'react';
+
+/** Rows per page of the recent-decisions table. */
+const PAGE_SIZE = 5;
 
 const popupStyle = {
   position: 'absolute',
@@ -29,6 +36,8 @@ const headerStyle = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
 };
 
+const headerButtons = { display: 'flex', alignItems: 'center', gap: 8 };
+
 const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 };
 
 const statCell = {
@@ -49,6 +58,22 @@ const primaryButton = {
   padding: '5px 12px', fontSize: 12, cursor: 'pointer',
 };
 
+const secondaryButton = {
+  backgroundColor: '#ffffff', color: '#374151', border: '1px solid #cbd5e1',
+  borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+};
+
+const pagerButton = {
+  backgroundColor: '#ffffff', color: '#2563eb', border: '1px solid #cbd5e1',
+  borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer',
+};
+
+const pagerButtonDisabled = { opacity: 0.4, cursor: 'not-allowed' };
+
+const captionStyle = { margin: 0, color: '#6b7280', fontSize: 11, lineHeight: '16px' };
+const logResultOk = { color: '#16a34a' };
+const logResultErr = { color: '#dc2626' };
+
 /** Truncate long reason text for display. */
 function truncate(text, max) {
   if (typeof text !== 'string') return '';
@@ -63,18 +88,80 @@ export function Popup(props) {
   const useSnapshot = props.useSnapshot;
   const t = props.t;
   if (store === undefined || useSnapshot === undefined || t === undefined) return null;
+  return ReactPopup({ store, useSnapshot, t });
+}
+
+function ReactPopup({ store, useSnapshot, t }) {
   const state = useSnapshot((s) => s);
+
+  // ---- paging state (hooks before any conditional return) ----
+  const [page, setPage] = useState(0);
+  // ---- open-log feedback state ----
+  const [logResult, setLogResult] = useState(undefined); // {ok:true,value} | {ok:false,error}
+  const [logBusy, setLogBusy] = useState(false);
+
+  const statusInfo = state.statusInfo && typeof state.statusInfo === 'object' ? state.statusInfo : {};
+  const recent = Array.isArray(statusInfo.recent) ? statusInfo.recent : [];
+  const totalPages = Math.max(1, Math.ceil(recent.length / PAGE_SIZE));
+
+  // Reset to the first page when the list size crosses a page boundary (a
+  // refresh changed the page count); otherwise keep the reader's position.
+  useEffect(() => {
+    setPage(0);
+  }, [totalPages]);
+
+  // Auto-clear a successful "log opened" notice after a few seconds.
+  useEffect(() => {
+    if (!logResult || !logResult.ok) return;
+    const timer = setTimeout(() => setLogResult(undefined), 4000);
+    return () => clearTimeout(timer);
+  }, [logResult]);
+
   if (!state.open) return null;
 
   const info = state.statusInfo;
   const stats = info && info.stats ? info.stats : {};
-  const recent = info && Array.isArray(info.recent) ? info.recent.slice(0, 20) : [];
+  const auditFile = typeof statusInfo.auditFile === 'string' && statusInfo.auditFile !== '' ? statusInfo.auditFile : undefined;
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = recent.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  const openLog = async () => {
+    setLogBusy(true);
+    setLogResult(undefined);
+    try {
+      setLogResult(await store.openLogFile());
+    } catch (err) {
+      setLogResult({
+        ok: false,
+        error: { code: 'internal', message: err && err.message ? String(err.message) : String(err) },
+      });
+    } finally {
+      setLogBusy(false);
+    }
+  };
 
   return h('div', { style: popupStyle },
     h('div', { style: headerStyle },
       h('strong', {}, t('chip')),
-      h('button', { style: primaryButton, onClick: () => void store.load() }, t('refresh')),
+      h('div', { style: headerButtons },
+        h('button', {
+          style: logBusy ? Object.assign({}, secondaryButton, { opacity: 0.6 }) : secondaryButton,
+          onClick: () => void openLog(),
+          title: auditFile !== undefined ? auditFile : undefined,
+        }, logBusy ? t('openLogBusy') : t('openLog')),
+        h('button', { style: primaryButton, onClick: () => void store.load() }, t('refresh')),
+      ),
     ),
+
+    // Open-log feedback line.
+    logResult !== undefined
+      ? h('p', { style: Object.assign({}, captionStyle, logResult.ok ? logResultOk : logResultErr) },
+          logResult.ok
+            ? t('openLogOk') + (logResult.value && logResult.value.path ? ': ' + logResult.value.path : '')
+            : logMessage(t, logResult.error))
+      : auditFile !== undefined
+        ? h('p', { style: captionStyle }, t('logPath') + ': ' + auditFile)
+        : null,
 
     h('div', { style: statGrid },
       statCellOf(t, 'statsTotal', stats.total),
@@ -96,14 +183,42 @@ export function Popup(props) {
               h('th', { style: thStyle }, t('tableReason')),
             )),
           h('tbody', {},
-            recent.map((row, idx) => tableRow(t, row, idx)),
+            pageRows.map((row, idx) => tableRow(t, row, safePage * PAGE_SIZE + idx)),
           ),
         ),
+
+    // Pager (hidden when everything fits on one page).
+    totalPages > 1
+      ? h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } },
+          h('button', {
+            style: Object.assign({}, pagerButton, safePage === 0 ? pagerButtonDisabled : {}),
+            disabled: safePage === 0,
+            onClick: () => setPage(safePage - 1),
+          }, t('pagePrev')),
+          h('span', { style: { fontSize: 12, color: '#374151' } },
+            t('pageOf', { current: String(safePage + 1), total: String(totalPages) })),
+          h('button', {
+            style: Object.assign({}, pagerButton, safePage >= totalPages - 1 ? pagerButtonDisabled : {}),
+            disabled: safePage >= totalPages - 1,
+            onClick: () => setPage(safePage + 1),
+          }, t('pageNext')),
+        )
+      : null,
 
     h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
       h('button', { style: primaryButton, onClick: () => store.togglePopup() }, t('close')),
     ),
   );
+}
+
+/** User-facing message for a failed open-log attempt (by error code). */
+function logMessage(t, error) {
+  const code = error && typeof error === 'object' && typeof error.code === 'string' ? error.code : undefined;
+  const detail = error && typeof error === 'object' && typeof error.message === 'string' ? error.message : undefined;
+  if (code === 'log-not-found') {
+    return t('logNotFound') + (detail ? ': ' + detail : '');
+  }
+  return t('openLogFail') + (detail ? ': ' + detail : '');
 }
 
 function statCellOf(t, key, value) {
