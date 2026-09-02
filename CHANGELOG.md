@@ -2,6 +2,32 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### 兼容：DSH 0.1.2-alpha.4
+
+- **peerDependencies 升级**：`dsh-llm` / `dsh-timeout` / `dsh-settings` /
+  `dsh-client-connection` / `dsh-client-ui-slots` / `dsh-client-locale` →
+  `^0.1.2-alpha.4`；`dsh-client-runtime` / `dsh-host-apiproxy` →
+  `^0.1.1-rc.2`（alpha 期未重发，最高仅到 `0.1.1-rc.2`）；`@deepseek-ai/schemastery`
+  保持 `^3.18.1`。旧 `^0.1.0-rc.6` 预发布区间按 semver 预发布元组规则不会匹配
+  `0.1.2-alpha.4`，会把插件钉死在 rc.8。
+- **settings 类服务迁移（lib/settings.js + lib/remote.js）**：alpha.4 删除
+  `installSettingsSection` / `settingsNamespace` 函数导出，`ctx.settings` 变为
+  `SettingsProvider` 类服务（默认导出）。命名空间改为纯 kebab-case 字符串字面量
+  `yolo-mode`（原品牌函数 `settingsNamespace('yolo-mode')` 的产物即同字符串）；
+  分区接线改为 `settings.installSection(ctx, ns, schema, entry, hooks)`，
+  钩子（`setSource` / `onChange` / `validate`）语义不变。`SettingsConflictError`、
+  `settings.mutate` / `describe` / `writable` 均保留，桥接层仅去除品牌调用。
+- **真实-Cordis 探针**：新增 `test/probe.test.mjs`，在真实
+  `@deepseek-ai/cordis` Context 上挂载插件本体（内存 `SettingsProvider` +
+  假 llm + sandboxPolicy stub），覆盖：激活与命名空间注册、取消、透明委托
+  （非升权 / 沙箱模式门 / includeSubagents）、`yolo` 预设确定性放行、裁判
+  allow（真实 dsh-llm 组装）、settings 用户层更新即时生效。
+- **devDependencies**：新增 `@deepseek-ai/cordis ^4.0.2`、`dsh-llm` /
+  `dsh-timeout` / `dsh-settings`（alpha.4）、`@deepseek-ai/schemastery`，
+  供 `npm test`（`node --test`）直接运行。
+
 ## [0.5.0] - 2026-08-28
 
 ### 新增

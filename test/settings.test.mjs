@@ -9,16 +9,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-
 import {
   YOLO_SETTINGS_NAMESPACE,
   YoloSettingsSchema,
   validateYoloSettings,
 } from '../lib/settings.js'
 
-test('命名空间为 yolo-mode', () => {
-  assert.equal(YOLO_SETTINGS_NAMESPACE, settingsNamespace('yolo-mode'))
+test('命名空间为 yolo-mode（alpha.4 起为纯 kebab-case 字符串字面量）', () => {
+  assert.equal(YOLO_SETTINGS_NAMESPACE, 'yolo-mode')
 })
 
 test('validateYoloSettings: 合法值通过（空分区 → 全默认）', () => {

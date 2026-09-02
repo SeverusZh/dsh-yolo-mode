@@ -18,7 +18,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { SettingsConflictError, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsConflictError } from '@deepseek-ai/dsh-settings'
 
 import {
   YOLO_RPC_CHANNEL,
@@ -31,7 +31,8 @@ import {
 import { YOLO_SETTINGS_NAMESPACE } from '../lib/settings.js'
 
 const NS = 'yolo-mode'
-const yoloNs = settingsNamespace(NS)
+// alpha.4：settingsNamespace() 品牌函数已删除，命名空间为纯 kebab-case 字符串字面量。
+const yoloNs = NS
 
 /* ------------------------------------------------------------------ *
  * 辅助：fake req / fake res / fake settings seam
