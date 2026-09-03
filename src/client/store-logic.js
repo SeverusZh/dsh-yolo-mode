@@ -39,10 +39,7 @@ export function unsetFieldOps(path) {
   return [{ op: 'unset', path: [...path] }];
 }
 
-/**
- * Ops to save the whole preset selection. Always writes the preset so a "save"
- * on an unmodified form is idempotent with the host.
- */
+/** Ops to save the whole preset selection. Always writes the preset so a "save" on an unmodified form is idempotent. */
 export function presetOps(preset) {
   return setFieldOps(['preset'], preset);
 }

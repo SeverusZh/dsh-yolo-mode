@@ -14,10 +14,7 @@ import { Chip } from './ui/Chip.js';
 import { Popup } from './ui/Popup.js';
 import { bindSnapshotSelector } from './bind.js';
 
-/**
- * Services required by these slot registrations (dsh.client.inject is the same
- * short-name set): slots, locale, connection, remote.
- */
+/** Services required by these slot registrations (dsh.client.inject). */
 export const inject = ['slots', 'locale', 'connection', 'remote'];
 
 /**
