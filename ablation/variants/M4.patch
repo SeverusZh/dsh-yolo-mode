@@ -1,0 +1,25 @@
+diff --git a/lib/index.js b/lib/index.js
+index e22123e..792aa9b 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -84,18 +84,9 @@ export function apply(ctx, rawConfig) {
+   const logger = ctx.logger('yolo-mode');
+ 
+   // ---- settings 分区（resolved = defaults + base(行配置) + 用户层）----
+-  // installSettingsSection 在 settings 服务存在时，把 resolved scope 设为 active 源；
+-  // 服务缺失/卸载时回退到 `entry`（插件行 config）。
++  // [ABLATION M4] installYoloSettings 被移除：不注册 yolo-mode 命名空间，
++  // sourceThunk 恒 undefined → effectiveConfig() 始终回落插件行 config。
+   let sourceThunk = undefined;
+-  installYoloSettings(ctx, rowCfg, {
+-    setSource: (thunk) => {
+-      sourceThunk = thunk;
+-    },
+-    onChange: () => {
+-      // resolved 已由 setSource 的 thunk 覆盖；judge 缓存按键在 getJudge 中自愈。
+-    },
+-    validate: validateYoloSettings,
+-  });
+ 
+   /** 每次裁决读取的有效配置（resolved settings；未就绪时插件行 config）后规范化。 */
+   function effectiveConfig() {

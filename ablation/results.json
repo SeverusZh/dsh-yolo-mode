@@ -1,0 +1,92 @@
+[
+  {
+    "variant": "M1",
+    "loadOk": true,
+    "checks": {
+      "judge-path-ablated": "ok",
+      "llm-not-called": "ok",
+      "yolo-allow-kept": "ok"
+    },
+    "pass": true,
+    "note": "移除 getJudge 的 createJudge 调用 → 裁判恒 null，judge 路径按预设 error 回退（balanced → delegate）"
+  },
+  {
+    "variant": "M2",
+    "loadOk": true,
+    "checks": {
+      "decision-kept": "ok",
+      "jsonl-not-appended": "ok",
+      "stats-kept": "ok"
+    },
+    "pass": true,
+    "note": "移除 audit() 的 fs.promises.appendFile → 审计 JSONL 不追加（保留 logger + recordDecision）"
+  },
+  {
+    "variant": "M3",
+    "loadOk": true,
+    "checks": {
+      "decision-kept": "ok",
+      "stats-not-updated": "ok",
+      "jsonl-kept": "ok"
+    },
+    "pass": true,
+    "note": "移除 audit() 的 recordDecision 调用 → 统计单例不更新（保留 logger + JSONL 追加）"
+  },
+  {
+    "variant": "M4",
+    "loadOk": true,
+    "checks": {
+      "namespace-not-registered": "ok",
+      "describe-no-view": "ok",
+      "row-config-kept": "ok"
+    },
+    "pass": true,
+    "note": "移除 installYoloSettings → yolo-mode 命名空间不注册，effectiveConfig 回落插件行 config"
+  },
+  {
+    "variant": "M5",
+    "loadOk": true,
+    "checks": {
+      "judge-kept": "ok",
+      "no-arguments-summary": "ok"
+    },
+    "pass": true,
+    "note": "移除 extractArgumentsSummary 提取 → 裁判仅凭 reason 裁决（无 tool/call 实参摘要）"
+  },
+  {
+    "variant": "M6",
+    "loadOk": true,
+    "checks": {
+      "subagent-gate-ablated": "ok",
+      "main-kept": "ok"
+    },
+    "pass": true,
+    "note": "移除 includeSubagents 门 → includeSubagents=false 时子代理会话也裁决"
+  },
+  {
+    "variant": "M7",
+    "loadOk": true,
+    "checks": {
+      "bridge-plugin-shape": "ok",
+      "bridge-injects-webserver": "ok",
+      "no-route-registered": "ok",
+      "main-kept": "ok"
+    },
+    "pass": true,
+    "note": "组合消融：不挂载 bridge 条目 → 主条目不注册任何 webServer 路由（/yolo-mode 桥消失）"
+  },
+  {
+    "variant": "M8",
+    "loadOk": true,
+    "checks": {
+      "main-no-client-ref": "ok",
+      "client-bundle-exists": "ok",
+      "client-build-script": "ok",
+      "client-export": "ok",
+      "bridge-export": "ok",
+      "main-kept": "ok"
+    },
+    "pass": true,
+    "note": "静态验证：client 独立构建产物存在、主条目不依赖 client、package.json 独立导出"
+  }
+]

@@ -1,0 +1,15 @@
+diff --git a/lib/index.js b/lib/index.js
+index e22123e..2e6bc75 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -205,9 +205,9 @@ export function apply(ctx, rawConfig) {
+     if (req.signal && req.signal.aborted) return 'cancelled';
+ 
+     // includeSubagents 门：不放行配置为不裁决的子代理会话（透明委托）。
++    // [ABLATION M6] 子代理过滤被移除：includeSubagents=false 时子代理会话也裁决。
+     const session = req.agent ? req.agent.session : undefined;
+     const origin = sessionOrigin(session);
+-    if (cfg.includeSubagents === false && origin === 'subagent') return next();
+ 
+     // 2. reason 必须匹配升权格式，否则透明委托。
+     const m = typeof req.reason === 'string' ? ESCALATION_RE.exec(req.reason) : null;

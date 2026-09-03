@@ -1,0 +1,14 @@
+diff --git a/lib/index.js b/lib/index.js
+index e22123e..fd34c55 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -235,7 +235,8 @@ export function apply(ctx, rawConfig) {
+     const justification = m[2];
+ 
+     // 5. 上下文增强：tool/call 反向扫描（1200 字符截断，失败静默降级）。
+-    const argumentsSummary = extractArgumentsSummary(req, session);
++    // [ABLATION M5] extractArgumentsSummary 提取被移除：裁判仅凭 reason 裁决。
++    const argumentsSummary = undefined;
+ 
+     // 6. resolvePolicy 四态映射。
+     const decision = resolvePolicy({

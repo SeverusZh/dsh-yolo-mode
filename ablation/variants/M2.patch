@@ -1,0 +1,21 @@
+diff --git a/lib/index.js b/lib/index.js
+index e22123e..da8a057 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -184,14 +184,8 @@ export function apply(ctx, rawConfig) {
+     } else {
+       logger.warn('[yolo-mode] 裁决升权', loggable);
+     }
+-    try {
+-      const line = JSON.stringify(entry) + '\n';
+-      fs.promises.appendFile(file, line, 'utf8').catch((err) => {
+-        logger.warn('审计 JSONL 追加失败', errorDescriptor(err));
+-      });
+-    } catch (err) {
+-      logger.warn('审计 JSONL 追加失败', errorDescriptor(err));
+-    }
++    // [ABLATION M2] fs.promises.appendFile 审计 JSONL 追加被移除（保留 logger + recordDecision）。
++    void file;
+ 
+     // 统计更新（模块级单例；bridge 条目经 statusView 读取）。
+     recordDecision(entry);

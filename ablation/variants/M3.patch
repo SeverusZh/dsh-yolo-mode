@@ -1,0 +1,15 @@
+diff --git a/lib/index.js b/lib/index.js
+index e22123e..de8e58e 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -193,8 +193,8 @@ export function apply(ctx, rawConfig) {
+       logger.warn('审计 JSONL 追加失败', errorDescriptor(err));
+     }
+ 
+-    // 统计更新（模块级单例；bridge 条目经 statusView 读取）。
+-    recordDecision(entry);
++    // [ABLATION M3] recordDecision 统计单例更新被移除（保留 logger + JSONL 追加）。
++    void entry;
+   }
+ 
+   const handler = async (req, next) => {
