@@ -6,8 +6,10 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-yolo-mode)](https://www.npmjs.com/package/dsh-yolo-mode)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.1.0--rc.6-blue)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.1.2--alpha.4-blue)](https://github.com/deepseek-ai/deepseek-harness)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+
+> **兼容性**：v0.5.0 支持 DSH **0.1.2-alpha.4+**（真实-Cordis 探针 125/125 通过；settings 已迁移至 alpha.4 的 `SettingsProvider` 类服务）。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
 
 ---
 
