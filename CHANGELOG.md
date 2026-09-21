@@ -30,6 +30,13 @@
 - `test/probe.test.mjs`：新增真实-Cordis 用例——裁判产出非 JSON（`BAD_OUTPUT`）→
   审计条目带 `error:"BAD_OUTPUT"` 且回退 delegate；成功路径断言 recent 条目**不含** `error`。
 
+### 兼容性
+
+- **新增 `dsh.compatibility` 声明**（DSH STORE 上架契约）：逐版本声明
+  `dshReleases` 兼容矩阵——`0.1.5-rc.1` / `0.1.5-rc.2` / `0.1.6-alpha.2` 均为
+  `compatible`（三版本已在本机真实装载运行，插件正常加载、零错误）；`node` 范围
+  `>=20`，与 `engines.node` 一致。未实测的版本不声明（扫描时按 `unknown` 处理）。
+
 ## [0.5.0] - 2026-09-04
 
 ### 兼容：DSH 0.1.2-alpha.4
