@@ -29,7 +29,7 @@ test('normalizeConfig: 全默认合并', () => {
     model: '',
     systemPrompt: '',
     timeoutMs: 20000,
-    maxTokens: 256,
+    maxTokens: 4096,
     concurrency: 2,
   })
   assert.equal(cfg.includeSubagents, true)
@@ -41,9 +41,18 @@ test('normalizeConfig: 部分字段会被默认合并补全', () => {
   assert.equal(cfg.preset, 'balanced')
   assert.deepEqual(cfg.modes, ['workspace-write'])
   assert.equal(cfg.judge.timeoutMs, 5000)
-  assert.equal(cfg.judge.maxTokens, 256)
+  assert.equal(cfg.judge.maxTokens, 4096)
   assert.equal(cfg.judge.concurrency, 2)
   assert.equal(cfg.includeSubagents, true)
+})
+
+test('normalizeConfig: 默认 judge.maxTokens 为 4096（推理型模型修复，Issue #1）', () => {
+  // 未显式给出 maxTokens（含 judge 子对象整体缺省）→ 默认 4096，非旧值 256。
+  assert.equal(normalizeConfig(undefined).judge.maxTokens, 4096)
+  assert.equal(normalizeConfig({}).judge.maxTokens, 4096)
+  assert.equal(normalizeConfig({ judge: { model: 'm' } }).judge.maxTokens, 4096)
+  // 显式值仍优先。
+  assert.equal(normalizeConfig({ judge: { maxTokens: 8192 } }).judge.maxTokens, 8192)
 })
 
 test('normalizeConfig: 非法 preset 抛错', () => {

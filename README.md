@@ -9,7 +9,7 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-0.1.2--rc.1-blue)](https://github.com/deepseek-ai/deepseek-harness)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
-> **兼容性**：v0.5.0 支持 DSH **0.1.2-alpha.4+**，已在当前运行时 **0.1.2-rc.1** 实测（真实-Cordis 探针 125/125 通过；settings 已迁移至 alpha.4 的 `SettingsProvider` 类服务）。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+> **兼容性**：v0.5.1 支持 DSH **0.1.2-alpha.4+**，已在当前运行时 **0.1.2-rc.1** 实测（真实-Cordis 探针通过；settings 已迁移至 alpha.4 的 `SettingsProvider` 类服务）。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
 
 ---
 
@@ -77,10 +77,12 @@ dsh plugin --profile web add <项目绝对路径>
 | `judge.model` | `string` | `''` | 裁判模型；与 provider 同非空才启用裁判 |
 | `judge.systemPrompt` | `string` | `''` | 裁判 system prompt；空 = 按预设取默认 |
 | `judge.timeoutMs` | `number` | `20000` | 单次裁判超时（毫秒） |
-| `judge.maxTokens` | `number` | `256` | 裁判输出最大 token 数 |
+| `judge.maxTokens` | `number` | `4096` | 裁判输出最大 token 数（推理型模型需调大，见下方说明） |
 | `judge.concurrency` | `number` | `2` | 并发裁判上限，溢出按错误回退 |
 | `includeSubagents` | `boolean` | `true` | 子代理会话是否同样裁决 |
 | `auditFile` | `string` | `''` | 审计日志路径；空 = `%TEMP%/dsh-yolo/judge.log` |
+
+> ⚠️ **推理型模型必须调大 `judge.maxTokens`**：若裁判模型会先输出一段内部推理（reasoning / chain-of-thought）再给出结论 JSON，则 token 预算会被推理内容消耗；预算过小时 `content` 为空、`finish_reason=length`，裁判以 `BAD_OUTPUT` 失败并回退为「转人工」（默认预设 `balanced` 下表现为**每次都弹人工审批**）。默认值已从 `256` 提升至 **`4096`**；若仍遇到回退，请继续调大（如 `8192`）。审计日志中此类失败会带 `error: "BAD_OUTPUT"`。
 
 ### 权限层级（`levels`）
 
@@ -130,7 +132,8 @@ levels:
 - **防回环**：裁判 prompt 与 agent 上下文隔离，防止模型借 Web 审批回环自批准 `danger-full-access`。
 - **不改写策略**：仅在 `ask` 策略下作为应答者，不改变 DSH 的沙箱 / 审批词汇。
 - **默认保守**：默认预设 `balanced`（不确定转人工），不默认启用 `permissive` / `yolo`。
-- **审计**：每次裁决落一行 JSONL，含 `{time, sessionId, origin, toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason?}`。
+- **审计**：每次裁决落一行 JSONL，含 `{time, sessionId, origin, toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason?, error?}`。`error` 仅在**裁判失败**时出现（值为 `JudgeError` 错误码，如 `BAD_OUTPUT` / `TIMEOUT` / `STREAM_ERROR` / `NO_ADAPTER`）；`outcome:"delegate"` 且有 `error`＝裁判失败转人工，无 `error`＝裁判主动转人工，二者可区分。
+- **失败可见**：statusView 载荷携带 `judgeErrors: { count, lastError?, lastErrorTime? }`（累计裁判失败次数与最近一次错误码），裁判异常不再只停留在 `logger.warn`。
 
 ## 开发
 

@@ -23,7 +23,7 @@ import SettingsProvider from '@deepseek-ai/dsh-settings'
 
 import { name, inject, apply } from '../lib/index.js'
 import { YOLO_SETTINGS_NAMESPACE } from '../lib/settings.js'
-import { stats } from '../lib/state.js'
+import { stats, getStatusPayload } from '../lib/state.js'
 
 /* ------------------------------------------------------------------ *
  * 最小服务实现（真实 cordis/dsh-settings 基类）
@@ -251,6 +251,39 @@ test('probe: balanced 预设 + 裁判 allow → allowed-once（真实 dsh-llm �
     // 审计统计递增（模块级 state 单例；本文件独立进程，无跨文件污染）。
     assert.equal(stats.total, beforeTotal + 1)
     assert.equal(stats.allowed, beforeAllowed + 1)
+    // 成功路径审计条目形状不变：带 reason、不带 error。
+    const top = getStatusPayload({}).recent[0]
+    assert.equal(top.outcome, 'allowed-once')
+    assert.equal(top.reason, 'probe says ok')
+    assert.equal('error' in top, false, '成功路径审计条目不携带 error 字段')
+  } finally {
+    await ctx.dispose?.()
+  }
+})
+
+test('probe: 裁判只产出 reasoning 块（推理预算耗尽，Issue #1）→ BAD_OUTPUT 回退 delegate 且审计带 error', async () => {
+  const { ctx } = await boot(
+    { preset: 'balanced', judge: { provider: 'opencode-go', model: 'probe-model' }, auditFile: '' },
+    {
+      produce: async function* () {
+        // 模拟推理型模型：token 预算全部消耗在 reasoning 块上，无 text 块，
+        // finish_reason=length → 裁判抛 BAD_OUTPUT（Issue #1 的根因场景）。
+        yield { type: 'block-start', index: 0, blockType: 'reasoning' }
+        yield { type: 'reasoning-delta', index: 0, text: 'the request seems fine but let me weigh the scope...' }
+        yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: 'the request seems fine but let me weigh the scope...' } }
+        yield { type: 'finish', reason: { kind: 'length' } }
+      },
+    },
+  )
+  try {
+    const beforeFailures = stats.judgeFailures
+    const outcome = await ask(ctx, makeRequest())
+    // balanced + error 回退 → delegate → next() → 人工（tail unavailable）。
+    assert.equal(outcome, 'unavailable')
+    assert.equal(stats.judgeFailures, beforeFailures + 1)
+    const top = getStatusPayload({}).recent[0]
+    assert.equal(top.outcome, 'delegate')
+    assert.equal(top.error, 'BAD_OUTPUT', '裁判失败审计条目必须带 JudgeError 码')
   } finally {
     await ctx.dispose?.()
   }

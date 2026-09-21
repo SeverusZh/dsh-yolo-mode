@@ -360,3 +360,34 @@ test('createJudge：systemPrompt 为空 → 使用内置 DEFAULT_SYSTEM_PROMPT',
   await judge(makeInput())
   assert.equal(captured.system, DEFAULT_SYSTEM_PROMPT)
 })
+
+// ---------------------------------------------------------------------------
+// 11) createJudge：maxTokens 兜底（Issue #1 —— 推理型模型需更大预算）
+// ---------------------------------------------------------------------------
+test('createJudge：maxTokens 缺省/非法 → 兜底 4096（非旧值 256）', async () => {
+  for (const maxTokens of [undefined, 0, -1, 1.5, '4096']) {
+    let captured
+    const llm = fakeLlm(async function* (options) {
+      captured = options
+      yield* textChunks('{"decision":"allow","reason":"ok"}')
+    })
+    const judge = createJudge({
+      llm, provider: 'p', model: 'm', systemPrompt: '', timeoutMs: 2000, maxTokens, concurrency: 1,
+    })
+    await judge(makeInput())
+    assert.equal(captured.maxTokens, 4096, `maxTokens=${String(maxTokens)} 应兜底为 4096`)
+  }
+})
+
+test('createJudge：显式 maxTokens 原样传给 llm.stream', async () => {
+  let captured
+  const llm = fakeLlm(async function* (options) {
+    captured = options
+    yield* textChunks('{"decision":"allow","reason":"ok"}')
+  })
+  const judge = createJudge({
+    llm, provider: 'p', model: 'm', systemPrompt: '', timeoutMs: 2000, maxTokens: 8192, concurrency: 1,
+  })
+  await judge(makeInput())
+  assert.equal(captured.maxTokens, 8192)
+})

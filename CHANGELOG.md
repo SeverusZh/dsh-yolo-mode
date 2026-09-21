@@ -2,6 +2,34 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.5.1] - 2026-09-22
+
+### 修复：裁判对推理型模型恒失败（Issue #1）
+
+- **默认 `judge.maxTokens` 256 → 4096**（`lib/policy.js` 默认配置与 `normalizeConfig`
+  合并值、`lib/judge.js` 兜底值同步）。根因：推理型裁判模型把 token 预算全部消耗在
+  reasoning 块上，`maxTokens` 过小时 `content` 为空（`finish_reason=length`），裁判抛
+  `BAD_OUTPUT` 并按 `error` 回退——`balanced` 预设下表现为「每次都转人工」，而
+  `judgeConfigured:true` 掩盖了失败。用户实测 4096 为可用值（256/1024 输出为 0）。
+- **审计条目新增 `error` 字段**（`lib/index.js`）：裁判失败时写入 `JudgeError.code`
+  （`BAD_OUTPUT` / `TIMEOUT` / `STREAM_ERROR` / `NO_ADAPTER` 等），使
+  `outcome:"delegate"` 的条目可区分「裁判失败转人工」与「裁判主动授意转人工」；
+  成功路径字段形状不变（不新增 `error`）。
+- **失败可见**（`lib/state.js`）：新增 `stats.judgeFailures` 计数与
+  `judgeHealth.lastError/lastErrorTime`，经 `getStatusPayload` 以
+  `judgeErrors: { count, lastError?, lastErrorTime? }` 暴露；裁判异常不再仅停留于
+  `logger.warn`。
+- **文档**：README 标注推理型模型必须调大 `judge.maxTokens`（默认已改 4096），并补充
+  审计 `error` 字段与 `judgeErrors` 载荷说明。
+
+### 测试
+
+- `test/policy.test.mjs`：默认 `maxTokens` 断言更新为 4096。
+- `test/judge.test.mjs`：新增「未显式传 `maxTokens` → 默认 4096 传入 `llm.stream`」用例。
+- `test/state.test.mjs`：新增裁判失败时 `judgeFailures` 递增、`judgeErrors` 载荷装配用例。
+- `test/probe.test.mjs`：新增真实-Cordis 用例——裁判产出非 JSON（`BAD_OUTPUT`）→
+  审计条目带 `error:"BAD_OUTPUT"` 且回退 delegate；成功路径断言 recent 条目**不含** `error`。
+
 ## [0.5.0] - 2026-09-04
 
 ### 兼容：DSH 0.1.2-alpha.4

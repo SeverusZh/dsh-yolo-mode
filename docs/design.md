@@ -60,7 +60,7 @@ config:
     model: ''
     systemPrompt: ''          # 空 = 内置裁判 prompt
     timeoutMs: 20000
-    maxTokens: 256
+    maxTokens: 4096           # 推理型模型需调大（见 §5）
     concurrency: 2            # 并发裁判信号量上限
   includeSubagents: true      # 子代理会话同样裁决（审计记录 session origin）
   auditFile: ''               # 空 = 使用默认 %TEMP%/dsh-yolo/judge.log（JSONL 审计）
@@ -81,7 +81,7 @@ config:
 5. 上下文增强：若 `req.callId` 存在，反向扫描 `req.agent.session.events` 中 `type === 'tool/call'` 且 `data.callId === req.callId` 的事件，取 `data.arguments`（原始 JSON 字符串），`JSON.parse` 后 `JSON.stringify` 截断至 1200 字符得 `argumentsSummary`；任何失败 → `argumentsSummary = undefined`（静默降级）。
 6. `resolvePolicy({ preset, levels, targetMode, toolName: req.toolName })` → `'allow'|'judge'|'delegate'|'deny'`（见 §4）。
 7. 按 §4 裁决映射；`judge` 走 §5 的 LLM 裁判（信号量溢出/失败/不确定 → §4 回退列）。
-8. 审计：`ctx.logger`（warn/info）+ 追加一行 JSONL 到 `auditFile`（`node:fs` appendFile，try/catch 包裹，失败不致命）。审计字段：`{ time, sessionId, origin: 'main'|'subagent', toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason? }`。`origin` 由 `req.agent` 的 session 是否带 delegation 信息判定（无法判定时 `'main'`）。
+8. 审计：`ctx.logger`（warn/info）+ 追加一行 JSONL 到 `auditFile`（`node:fs` appendFile，try/catch 包裹，失败不致命）。审计字段：`{ time, sessionId, origin: 'main'|'subagent', toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason?, error? }`（`error` 仅在裁判失败时出现，值 ∈ `JudgeError.code`；成功路径不携带，保持字段形状不变）。`origin` 由 `req.agent` 的 session 是否带 delegation 信息判定（无法判定时 `'main'`）。
 9. 所有副作用（监听器注册、judge 实例、审计文件句柄）必须由 `ctx.effect(...)` 管理，插件卸载时完全清理。
 
 **绝不**：改写审批策略、对非升权请求插手、在错误路径放行。
@@ -142,6 +142,7 @@ export function createJudge({ llm, provider, model, systemPrompt, timeoutMs, max
 - `input`：`{ toolName, targetMode, justification, workspaceRoot, argumentsSummary?, signal? }`；`signal` 为本次调用的上游取消信号（如审批请求的 `req.signal`），中止 → `JudgeError('ABORTED')`，优先于构造时传入的 signal。
 - 内置 system prompt（`systemPrompt` 为空时）：安全审计者角色，必须包含：①"你不是发起方 agent，只依据事实裁决"；②"存疑即 deny/unsure"；③"绝不因发起方的目标/意图放行"。用户消息 = 单条 `createUserMessage(JSON.stringify(input, null, 2))`。
 - 流式组装：`for await (const chunk of llm.stream({ provider, model, messages, system, maxTokens, signal }))` → `assembler.push(chunk)`；`finish` 分片后取 `assembler.blocks()` 中的 text 块（无 text → `BAD_OUTPUT`；出现 tool-call 块 → `BAD_OUTPUT`）。
+- **`maxTokens` 默认 4096**（原 256）：推理型模型把预算消耗在 reasoning 块上，预算不足时 text 为空 → `BAD_OUTPUT`。裁判只解析 text 块、丢弃 reasoning 块（reasoning 为模型内部推理，非裁决输出）。
 - 超时：`deadline(reqSignal, timeoutMs, 'YOLO_JUDGE_TIMEOUT')` 的 signal 传入 stream；组装循环内检查 `signal.aborted` → `JudgeError('TIMEOUT')`（上游 signal 中止则 `'ABORTED'`，按 signal.reason/代码区分：上游传递的 signal 先于 deadline 判断）。
 - 结果经 `parseJudgeOutput` 解析；`null` → `JudgeError('BAD_OUTPUT')`。
 - 信号量：`concurrency` 上限；溢出 → 抛 `JudgeError('OVERLOAD')`（调用方按 error 回退处理）；进入者用 try/finally 释放。
@@ -231,7 +232,7 @@ export default function apply(ctx, config) { ... }   // 或 { name, apply } 均�
 
 ### 11.1 HTTP API（宿主）
 
-- `GET /plugins/yolo-mode/status` → `200 {preset, modes, levels, judge:{provider,model,systemPrompt,timeoutMs,maxTokens,concurrency}, judgeConfigured, stats:{total,allowed,rejected,delegated}, recent:[{time,toolName,targetMode,decision,outcome,reason?}]}`（recent ≤20，倒序）。
+- `GET /plugins/yolo-mode/status` → `200 {preset, modes, levels, judge:{provider,model,systemPrompt,timeoutMs,maxTokens,concurrency}, judgeConfigured, stats:{total,allowed,rejected,delegated,judgeFailures}, judgeErrors:{count,lastError?,lastErrorTime?}, recent:[{time,toolName,targetMode,decision,outcome,reason?,error?}]}`（recent ≤20，倒序）。
 - `POST /plugins/yolo-mode/config`，body（≤64KB）`{preset?, modes?, levels?, judge?{provider?,model?,systemPrompt?,timeoutMs?,maxTokens?,concurrency?}}` → 合并候选 `normalizeConfig(merge(rowCfg, settingsSection, body))` 校验（fail-loud，400 带错误信息）→ `settings.update('yolo-mode', body)` → `200 {ok:true, config}`。非 JSON/超长/方法错误 → 4xx。
 - 信任边界：与 DSH Web UI 同源同权，不做额外认证（README 安全须知注明）。
 
