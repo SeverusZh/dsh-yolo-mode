@@ -2,6 +2,18 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.5.2-beta.0] - 2026-09-24
+
+### Beta（DSH 0.1.7-rc.1 适配，测试版）
+
+- 本分支（`dev-0.1.7.rc1`，尚未合并 `main`）相对 `main` 的适配改动：设置子系统按
+  0.1.7 的 `SettingsForms` 新模型重写（`lib/settings.js` / `lib/index.js` /
+  `lib/remote.js`），`@deepseek-ai/dsh-llm`、`dsh-timeout`、`dsh-settings`、
+  `dsh-client-connection`、`dsh-client-ui-slots`、`dsh-client-locale` 的 peer 范围升至
+  `^0.1.7-rc.1`，`dsh.compatibility.dshReleases` 新增 `"0.1.7-rc.1": "compatible"`，
+  README 徽章与兼容性说明同步。详见下方 `0.5.2` 条目。
+- 发布为 npm 测试版（`--tag beta`）；`latest` 保持不变。正式版 `0.5.2` 待 `main` 合并后发布。
+
 ## [0.5.2] - 2026-09-24
 
 ### 兼容：设置子系统迁移至 DSH 0.1.7-rc.1 的 `SettingsForms`
