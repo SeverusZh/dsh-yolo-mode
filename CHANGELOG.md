@@ -2,6 +2,45 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.5.2] - 2026-09-24
+
+### 兼容：设置子系统迁移至 DSH 0.1.7-rc.1 的 `SettingsForms`
+
+DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSection`
+（默认导出改为 `SettingsForms`），本插件原设置子系统因此在新版抛
+`TypeError: settings.installSection is not a function` 而无法激活。本次按官方新模型重写：
+
+- **设置声明 → 插件 Config schema**（`lib/settings.js` 的 `YoloSettingsSchema`，
+  经 `lib/index.js` 的 `export const Config` 暴露）：每个顶层字段标注
+  `.volatile()`，声明为可热更——写回经 loader 的就地更新，插件无需重启即可生效
+  （与旧模型「只改某些字段不重启」行为一致）。
+- **设置读取 → `config.<field>.get()`**（`readYoloConfig`）：`effectiveConfig()`
+  每次裁决读取实时解析值（schema 默认 + 条目 config），再 `normalizeConfig`。
+- **页面策略 → `settings.configure({ auto: false }, fiber)`**
+  （`installYoloSettingsPage`）：插件自带 Web 设置页，`auto:false` 禁止宿主再自动
+  生成重复页面；settings 服务缺失时零侵入跳过。
+- **自发布设置桥与客户端不变**：`lib/remote.js` 的 `settingsView` / `settingsMutate`
+  端点本就建立在 `describe` / `mutate` / `writable` / `SettingsConflictError` 之上，
+  这些方法面在 `SettingsForms` 中保持不变，端点形状与乐观锁语义无需改动，客户端
+  无需改动。
+- **双层 → 单层映射**：旧「插件行 config 为 base 层 + settings.yaml 用户层」映射为
+  0.1.7「Profile 插件条目 config 单层」；旧 `settings.yaml` 由
+  `SettingsForms.importLegacyDocument` 一次性导入到 Profile。
+
+### 兼容性
+
+- `peerDependencies` 的 `@deepseek-ai/dsh*` 下限提升至 `^0.1.7-rc.1`（`dsh-host-apiproxy`
+  / `dsh-client-runtime` 两个历史例外保持 `^0.1.1-rc.2`）。
+- `dsh.compatibility.dshReleases` 增列 `0.1.7-rc.1: compatible`。
+- README 徽章与兼容性行同步至 0.1.7-rc.1。
+
+### 测试
+
+- `test/probe.test.mjs` 重写至 0.1.7 API：真实 cordis 经 Config schema 解析条目
+  config、断言 `configure({auto:false})` 被调用、并用 cosmokit `updateVolatile`
+  （loader `_commitVolatile` 的同一原语）验证 volatile 就地更新后裁决即时生效。
+- 其余测试文件保持通过；`npm test` 132 项全绿。
+
 ## [0.5.1] - 2026-09-22
 
 ### 修复：裁判对推理型模型恒失败（Issue #1）

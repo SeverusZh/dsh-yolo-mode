@@ -3,49 +3,48 @@
  *
  * 与其余单测（fake-ctx 或纯函数）不同，本文件在真实 @deepseek-ai/cordis
  * Context 上挂载插件本体（lib/index.js 的 apply），提供插件所需的最小服务：
- *   - settings：真实 @deepseek-ai/dsh-settings 的 SettingsProvider 子类
- *     （内存文档，走 alpha.4 的 load/persist/register/installSection 真实路径）；
- *   - llm：FakeLlm（真实 cordis Service 子类，stream() 由测试注入分片流；
- *     listProviders 供未来扩展）；
+ *   - settings：真实 cordis Service 子类的轻量替身，仅实现插件用到的
+ *     `configure(presentation, owner)`（0.1.7 SettingsForms 页面策略）——
+ *     用于断言插件以 { auto:false }（自建 UI）注册页面策略；
+ *   - llm：FakeLlm（真实 cordis Service 子类，stream() 由测试注入分片流）；
  *   - sandboxPolicy：普通对象 stub（插件经 ctx.get('sandboxPolicy') 惰性读取）。
  * 然后经 ctx.waterfall('approval/request', req, tail) 派发真实审批请求，
- * 断言插件的激活、settings 命名空间注册、裁决/委托/取消/过滤全链路。
+ * 断言插件的激活、设置读取、裁决/委托/取消/过滤全链路。
  *
- * 目的：捕获 fake-ctx 单测漏掉的契约漂移（alpha.4 把 dsh-settings 改为
- * SettingsProvider 类服务、approval/request 事件载荷、llm stream 签名等）。
+ * 0.1.7 迁移：插件不再经 installSection 注册 settings 命名空间，而是导出
+ * Config schema（volatile 字段）并由 cordis 解析条目 config；设置读取用
+ * `config.<field>.get()`。故本探针经真实 cordis 的 Config 解析路径挂载插件，
+ * 并用 cosmokit 的 `updateVolatile`（loader `_commitVolatile` 的同一原语）
+ * 就地更新 volatile 引用，验证"改设置不重启插件即生效"——DSH 真实装载下的
+ * 完整 settingsMutate → loader 链路另见本次迁移的 DSH e2e 记录。
+ *
+ * 目的：捕获 fake-ctx 单测漏掉的契约漂移（0.1.7 Config/volatile 解析、
+ * approval/request 事件载荷、llm stream 签名等）。
  *
  * 运行：node --test test/probe.test.mjs
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Context, Service } from '@deepseek-ai/cordis'
-import SettingsProvider from '@deepseek-ai/dsh-settings'
+import { isVolatile, updateVolatile } from '@deepseek-ai/cosmokit'
 
-import { name, inject, apply } from '../lib/index.js'
-import { YOLO_SETTINGS_NAMESPACE } from '../lib/settings.js'
+import { name, inject, apply, Config } from '../lib/index.js'
 import { stats, getStatusPayload } from '../lib/state.js'
 
 /* ------------------------------------------------------------------ *
- * 最小服务实现（真实 cordis/dsh-settings 基类）
+ * 最小服务实现（真实 cordis Service 基类）
  * ------------------------------------------------------------------ */
 
-/** 内存文档的 SettingsProvider（alpha.4 抽象基类的最小实现）。 */
-class MemorySettings extends SettingsProvider {
+/** 轻量 settings 替身：只实现插件用到的页面策略注册（0.1.7 SettingsForms）。 */
+class FakeSettings extends Service {
   constructor(ctx) {
-    super(ctx)
-    this._doc = {}
+    super(ctx, 'settings')
+    this.policies = []
   }
 
-  get writable() {
-    return true
-  }
-
-  async load() {
-    return structuredClone(this._doc)
-  }
-
-  async persist(ns, section) {
-    this._doc[ns] = structuredClone(section)
+  configure(presentation, owner) {
+    this.policies.push({ presentation, owner })
+    return () => {}
   }
 }
 
@@ -86,14 +85,14 @@ function textChunks(text) {
 
 /**
  * 启动一个真实 cordis Context：提供 settings/llm/sandboxPolicy 后挂载插件。
- * @param {object} [config] 插件行 config
+ * @param {object} [config] 插件行 config（经真实 Config schema 解析）
  * @param {{mode?:string, workspaceRoot?:string}} [policy] sandboxPolicy.resolve 返回值
  * @param {Function} [produce] FakeLlm 的 stream 产出
- * @returns {Promise<{ctx: Context, settings: SettingsProvider, llm: FakeLlm}>}
+ * @returns {Promise<{ctx: Context, settings: FakeSettings, llm: FakeLlm, fiber: object}>}
  */
 async function boot(config, { policy, produce } = {}) {
   const ctx = new Context()
-  await ctx.plugin(MemorySettings, {})
+  await ctx.plugin(FakeSettings, {})
   await ctx.plugin(FakeLlm, {})
   const llm = ctx.get('llm')
   llm.produce = produce
@@ -106,8 +105,11 @@ async function boot(config, { policy, produce } = {}) {
       }),
     })
   })
-  await ctx.plugin({ name, inject, apply }, config ?? {})
-  return { ctx, settings: ctx.get('settings'), llm }
+  const fiber = ctx.plugin({ name, inject, apply, Config }, config ?? {})
+  await fiber
+  // 让 settings 的 ctx.inject 回调落地（页面策略注册）。
+  await Promise.resolve()
+  return { ctx, settings: ctx.get('settings'), llm, fiber }
 }
 
 /** 构造一个升权审批申请（agent.session 为裸 DSH 会话字形）。 */
@@ -137,22 +139,26 @@ function ask(ctx, req) {
  * 探针用例
  * ------------------------------------------------------------------ */
 
-test('probe: 插件在真实 Context 上激活且 yolo-mode settings 命名空间注册（alpha.4 class API）', async () => {
+test('probe: 插件在真实 Context 上激活且以 auto:false 注册设置页面策略（0.1.7 SettingsForms）', async () => {
   const { ctx, settings } = await boot({})
   try {
-    // 命名空间已注册并可读（schema 决议：preset 有默认；空集合字段为 []/{}）。
-    const resolved = settings.get(YOLO_SETTINGS_NAMESPACE)
-    assert.ok(resolved, 'yolo-mode namespace must be registered')
-    assert.equal(resolved.preset, 'balanced')
-    // schema 层 modes 无默认 → []；['workspace-write'] 默认发生在插件层
-    // effectiveConfig() 的 normalizeConfig（本文件其余用例行为验证）。
-    assert.deepEqual(resolved.modes, [])
+    assert.ok(settings instanceof FakeSettings, 'settings service must be mounted')
+    assert.equal(settings.policies.length, 1, 'the plugin must register exactly one page policy')
+    assert.equal(settings.policies[0].presentation.auto, false, 'auto:false keeps the plugin-owned UI page')
+    assert.ok(settings.policies[0].owner, 'the policy must be bound to the plugin fiber')
+  } finally {
+    await ctx.dispose?.()
+  }
+})
 
-    const descriptors = settings.describe({ redactSecrets: true })
-    const view = descriptors.find((d) => d.ns === YOLO_SETTINGS_NAMESPACE)
-    assert.ok(view, 'describe() must surface the yolo-mode namespace')
-    assert.equal(view.applies, 'live')
-    assert.equal(typeof view.revision, 'number')
+test('probe: 空条目 config → Config schema 解析出 volatile 引用与默认值', async () => {
+  const { ctx, fiber } = await boot({})
+  try {
+    // cordis 用插件导出的 Config 解析条目 config：空 config 也得到对象。
+    const resolved = fiber.config
+    assert.equal(isVolatile(resolved.preset), true, 'preset must be a live volatile reference')
+    assert.equal(resolved.preset.get(), 'balanced', 'preset default applies')
+    assert.deepEqual(resolved.modes.get(), [], 'unset modes resolve to the empty collection')
   } finally {
     await ctx.dispose?.()
   }
@@ -246,7 +252,7 @@ test('probe: balanced 预设 + 裁判 allow → allowed-once（真实 dsh-llm �
     const beforeAllowed = stats.allowed
     const outcome = await ask(ctx, makeRequest())
     assert.equal(outcome, 'allowed-once')
-    // 裁判确实经 ctx.llm.stream() 被调用，且携带行配置的 provider/model。
+    // 裁判确实经 ctx.llm.stream() 被调用，且携带 Config 的 provider/model。
     assert.deepEqual(seen, [{ provider: 'opencode-go', model: 'probe-model' }])
     // 审计统计递增（模块级 state 单例；本文件独立进程，无跨文件污染）。
     assert.equal(stats.total, beforeTotal + 1)
@@ -289,13 +295,17 @@ test('probe: 裁判只产出 reasoning 块（推理预算耗尽，Issue #1）→
   }
 })
 
-test('probe: settings 用户层更新后 effective config 立即生效（balanced → yolo）', async () => {
-  const { ctx, settings } = await boot({ preset: 'balanced' })
+test('probe: volatile 设置就地更新后 effective config 立即生效（balanced → yolo，不重启插件）', async () => {
+  const { ctx, fiber } = await boot({ preset: 'balanced' })
   try {
     // 初始 balanced：workspace-write 升权走 judge → 未配置裁判 → delegate。
     assert.equal(await ask(ctx, makeRequest()), 'unavailable')
-    // 用户层写 preset: yolo → resolved 变化 → 插件 sourceThunk 读到新值。
-    await settings.update(YOLO_SETTINGS_NAMESPACE, { preset: 'yolo' })
+    // loader `_commitVolatile` 的同一原语：把新解析值的 preset 写回插件持有的
+    // volatile 引用（就地，不重启）。插件 effectiveConfig() 读到新值。
+    const refBefore = fiber.config.preset
+    updateVolatile(fiber.config.preset, Config({ preset: 'yolo' }).preset)
+    assert.equal(fiber.config.preset, refBefore, 'volatile reference identity is stable (in-place update)')
+    assert.equal(fiber.config.preset.get(), 'yolo')
     assert.equal(await ask(ctx, makeRequest()), 'allowed-once')
   } finally {
     await ctx.dispose?.()
