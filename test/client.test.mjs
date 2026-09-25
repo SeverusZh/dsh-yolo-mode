@@ -29,6 +29,7 @@ import {
   markConflict,
   adoptRevision,
   classifyMutateError,
+  joinProviderDirectory,
 } from '../src/client/store-logic.js'
 import { YoloStore } from '../src/client/store.js'
 import { PRESETS_INFO, presetInfo } from '../src/client/presets.js'
@@ -379,6 +380,127 @@ test('YoloStore: 目录失败但 bridge 失败 → status error（目录不背�
 })
 
 // ---------------------------------------------------------------------------
+// 0.1.7+ 目录来源：remote.llm（listProviders + listConfigurableProviders）
+// 与 remote.session.modelCatalog
+// ---------------------------------------------------------------------------
+
+/** 假 remote 服务：llm 命名空间（0.1.7+ 目录）+ session（模型目录）。 */
+function makeFakeRemote({ registered = [], declared = [], groups = [], fail = {} } = {}) {
+  return {
+    llm: {
+      listProviders: async () => {
+        if (fail.registered) throw new Error('listProviders boom')
+        return { ok: true, value: registered }
+      },
+      listConfigurableProviders: async () => {
+        if (fail.declared) throw new Error('listConfigurableProviders boom')
+        return { ok: true, value: declared }
+      },
+    },
+    session: {
+      modelCatalog: async () => {
+        if (fail.catalog) throw new Error('modelCatalog boom')
+        return { ok: true, value: { default: { provider: '', model: '' }, routableProviders: [], groups } }
+      },
+    },
+  }
+}
+
+test('store-logic: joinProviderDirectory 声明项在前、注册项补尾、按 provider 去重', () => {
+  const rows = joinProviderDirectory(
+    [
+      { id: 'deepseek-official', name: 'DeepSeek Official' },
+      { id: 'ollama-pro', name: 'Ollama Pro' },
+    ],
+    [
+      { provider: 'deepseek-official', displayName: 'DeepSeek 官方' },
+      { provider: 'openai', displayName: 'OpenAI' },
+    ],
+  )
+  assert.deepEqual(rows, [
+    { provider: 'deepseek-official', displayName: 'DeepSeek 官方', active: true },
+    { provider: 'openai', displayName: 'OpenAI', active: false },
+    { provider: 'ollama-pro', displayName: 'Ollama Pro', active: true },
+  ])
+})
+
+test('YoloStore: remote.llm + remote.session 下 load 填入 providers/models 快照', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 4, value: { preset: 'balanced' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  })
+  const remote = makeFakeRemote({
+    registered: [{ id: 'deepseek-official', name: 'DeepSeek Official' }],
+    declared: [
+      { provider: 'deepseek-official', displayName: 'DeepSeek 官方', settingsNs: 'modelProvider.deepseekOfficial', settingsPath: [] },
+      { provider: 'ollama-pro', displayName: 'Ollama Pro', settingsNs: 'modelProvider.ollamaPro', settingsPath: [] },
+    ],
+    groups: [
+      { id: 'deepseek-official', name: 'DeepSeek Official', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' }] },
+      { id: 'ollama-pro', name: 'Ollama Pro', models: [{ id: 'glm-5.3:cloud', name: 'GLM-5.3' }] },
+    ],
+  })
+  const store = new YoloStore({ rpc, remote })
+  await store.load()
+  const snap = store.getSnapshot()
+
+  assert.equal(snap.status, 'ready')
+  // 供应商下拉现在非空（bug 回归护栏）：声明项 + 注册项 join
+  assert.equal(snap.providers.length, 2)
+  assert.equal(snap.providers[0].provider, 'deepseek-official')
+  assert.equal(snap.providers[0].displayName, 'DeepSeek 官方')
+  assert.equal(snap.providers[1].provider, 'ollama-pro')
+  // 模型目录按 provider 分组
+  assert.equal(snap.models.length, 2)
+  assert.equal(snap.models[0].id, 'deepseek-official')
+  assert.equal(snap.models[0].models[0].id, 'deepseek-v4-flash')
+})
+
+test('YoloStore: remote.llm 目录调用抛错 → 置空数组且 status 仍 ready（非致命）', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'off' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'off' }),
+  })
+  const remote = makeFakeRemote({ fail: { registered: true, declared: true, catalog: true } })
+  const store = new YoloStore({ rpc, remote })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.status, 'ready', '目录失败不应把 status 打 error')
+  assert.deepEqual(snap.providers, [])
+  assert.deepEqual(snap.models, [])
+})
+
+test('YoloStore: remote 存在但无 llm 命名空间 → 回退 legacy connection.api.llm', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'off' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'off' }),
+  })
+  const llm = makeFakeLlm({
+    providers: [{ provider: 'legacy-p', displayName: 'Legacy P' }],
+    groups: [{ id: 'legacy-p', name: 'Legacy P', models: [{ id: 'm1', name: 'M1' }] }],
+  })
+  const store = new YoloStore({ rpc, llm, remote: { session: {} } })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.providers.length, 1)
+  assert.equal(snap.providers[0].provider, 'legacy-p')
+  assert.equal(snap.models[0].models[0].id, 'm1')
+})
+
+test('YoloStore: remote.llm 可用时优先于 legacy llm（不合并两者）', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'off' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'off' }),
+  })
+  const llm = makeFakeLlm({ providers: [{ provider: 'legacy-p', displayName: 'Legacy P' }] })
+  const remote = makeFakeRemote({ registered: [{ id: 'remote-p', name: 'Remote P' }] })
+  const store = new YoloStore({ rpc, llm, remote })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.deepEqual(snap.providers.map((p) => p.provider), ['remote-p'])
+})
+
+// ---------------------------------------------------------------------------
 // presets.js 展示数据
 // ---------------------------------------------------------------------------
 
@@ -570,7 +692,7 @@ function createFakeCtx() {
 test('构建产物: exports.apply 与 exports.inject 存在', () => {
   const mod = loadBundle()
   assert.equal(typeof mod.apply, 'function')
-  assert.deepEqual(mod.inject, ['slots', 'locale', 'connection', 'remote'])
+  assert.deepEqual(mod.inject, ['slots', 'locale', 'connection', 'remote', 'remote.llm'])
 })
 
 test('构建产物: apply 在缺少 connection 时静默返回（不注册）', () => {

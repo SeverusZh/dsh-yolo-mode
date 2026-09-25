@@ -101,3 +101,40 @@ export function classifyMutateError(code, _message) {
   if (code === 'settings-rejected' || code === 'schema-validation') return 'rejected';
   return 'fatal';
 }
+
+/**
+ * Join the live provider routes (`remote.llm.listProviders`, rows `{id, name}`)
+ * with the declared configurable providers
+ * (`remote.llm.listConfigurableProviders`, rows `{provider, displayName, …}`)
+ * into one directory of `{ provider, displayName }` rows the select consumes.
+ * Declared entries lead (so a configured-but-not-yet-registered provider still
+ * appears), then any registered route the declaration does not name. Mirrors
+ * the official settings-models `joinProviderDirectory`.
+ */
+export function joinProviderDirectory(registered, declared) {
+  const routes = Array.isArray(registered) ? registered : [];
+  const directory = Array.isArray(declared) ? declared : [];
+  const rows = [];
+  const named = new Set();
+  for (const entry of directory) {
+    if (entry === null || typeof entry !== 'object') continue;
+    if (typeof entry.provider !== 'string' || entry.provider === '') continue;
+    named.add(entry.provider);
+    rows.push({
+      provider: entry.provider,
+      displayName: typeof entry.displayName === 'string' && entry.displayName !== '' ? entry.displayName : undefined,
+      active: routes.some((route) => route && route.id === entry.provider),
+    });
+  }
+  for (const route of routes) {
+    if (route === null || typeof route !== 'object') continue;
+    if (typeof route.id !== 'string' || route.id === '') continue;
+    if (named.has(route.id)) continue;
+    rows.push({
+      provider: route.id,
+      displayName: typeof route.name === 'string' && route.name !== '' ? route.name : undefined,
+      active: true,
+    });
+  }
+  return rows;
+}

@@ -2,17 +2,48 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [0.5.2-beta.0] - 2026-09-24
+## [0.5.3] - 2026-09-25
 
-### Beta（DSH 0.1.7-rc.1 适配，测试版）
+### 兼容：适配 DSH 0.1.7-rc.2
 
-- 本分支（`dev-0.1.7.rc1`，尚未合并 `main`）相对 `main` 的适配改动：设置子系统按
-  0.1.7 的 `SettingsForms` 新模型重写（`lib/settings.js` / `lib/index.js` /
-  `lib/remote.js`），`@deepseek-ai/dsh-llm`、`dsh-timeout`、`dsh-settings`、
-  `dsh-client-connection`、`dsh-client-ui-slots`、`dsh-client-locale` 的 peer 范围升至
-  `^0.1.7-rc.1`，`dsh.compatibility.dshReleases` 新增 `"0.1.7-rc.1": "compatible"`，
-  README 徽章与兼容性说明同步。详见下方 `0.5.2` 条目。
-- 发布为 npm 测试版（`--tag beta`）；`latest` 保持不变。正式版 `0.5.2` 待 `main` 合并后发布。
+- 在本机 **0.1.7-rc.2** 上真实装载运行通过：全部入口激活、零错误、无 pending
+  （`did not activate` 告警不出现）；设置读写（`settingsView` / `settingsMutate`
+  乐观锁）实测往返成功。`dsh.compatibility.dshReleases` 新增
+  `"0.1.7-rc.2": "compatible"`；README 徽章与兼容性说明同步。
+- 0.1.7-rc.1 → rc.2 的官方 `@deepseek-ai/dsh-*` 公开 API **无移除、无改名**
+  （`dsh-settings` / `dsh-client-connection` / `dsh-client-ui-slots` 逐字节相同，
+  其余为增量新增），本插件无源码适配需求。
+
+### 修复：设置页「供应商」下拉为空
+
+设置页 `judgeProvider` 下拉始终为空。根因：0.1.7 起客户端 `connection.api.llm`
+已不存在，store 构造时 `this.llm` 恒为 `null`，`_fetchLlmDirectory()` 直接返回空数组。
+本次改为经客户端 Remote 服务读取：
+
+- **供应商**：`ctx.remote.llm.listProviders()`（已注册路由）与
+  `listConfigurableProviders()`（已声明可配置）经 `joinProviderDirectory` 合并为与官方
+  settings-models 页一致的 `{provider, displayName}` 行。
+- **模型**：`ctx.remote.session.modelCatalog()` 的 `groups`（按 provider 分组），
+  与官方同一数据源。
+- **inject**：`package.json` 的 `dsh.client.inject` 与客户端 `inject` 数组新增
+  `"remote.llm"`。
+- **降级保留**：无 `remote.llm` 命名空间时回退旧 `connection.api.llm`；目录读取失败
+  不致命，仍回退自由文本输入（既有设计不变）。
+
+### 测试
+
+- 新增 `store-logic.joinProviderDirectory` 与 4 项 `YoloStore` `remote.llm` /
+  `remote.session` 单测（目录填充、失败非致命、legacy 回退、remote 优先）；
+  `npm test` 137 项全绿。
+- 本机无浏览器，客户端 UI 未在浏览器中实际渲染验证；已核对 `npm pack` 产物经
+  0.1.7-rc.2 profile 装载后**被服务的**客户端 bundle 含 `remote.llm.listProviders`
+  / `listConfigurableProviders` / `session.modelCatalog`，且宿主 `llm/listProviders`、
+  `session/modelCatalog` 实测返回非空目录（供应商下拉将填充 5 项）。
+
+### Beta 说明
+
+- 测试版 `0.5.2-beta.0`（`--tag beta`）的内容——设置子系统迁移至 DSH 0.1.7 的
+  `SettingsForms`——随本版一并正式发布，详见下方 `0.5.2` 条目。
 
 ## [0.5.2] - 2026-09-24
 

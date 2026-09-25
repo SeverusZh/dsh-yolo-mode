@@ -6,10 +6,12 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-yolo-mode)](https://www.npmjs.com/package/dsh-yolo-mode)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![DeepSeek Harness](https://img.shields.io/badge/DSH%200.1.5--rc.1%20%2F%20rc.2%20%2F%200.1.6--alpha.2%20%2F%200.1.7--rc.1-blue)](https://github.com/deepseek-ai/deepseek-harness)
+[![DeepSeek Harness](https://img.shields.io/badge/DSH%200.1.5--rc.1%20%2F%20rc.2%20%2F%200.1.6--alpha.2%20%2F%200.1.7--rc.1%20%2F%20rc.2-blue)](https://github.com/deepseek-ai/deepseek-harness)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
-> **兼容性**：v0.5.2 支持 DSH **0.1.5-rc.1+**，已在 **0.1.5-rc.1 / 0.1.5-rc.2 / 0.1.6-alpha.2 / 0.1.7-rc.1** 实测（真实-Cordis 探针通过；设置子系统已迁移至 0.1.7 的 `SettingsForms`——插件 Config schema + volatile 热更 + 自建设置页）。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+> **维护状态**：官方已在 DSH 中提供实验性 Auto review 能力（`@deepseek-ai/dsh-experimental-auto-review`，LLM 逐工具授权审查，在 `ask` 审批策略下替代人工审批），与本插件的「LLM 裁判自动审批」功能重叠。因此本插件**可能在未来停止维护**；如需官方原生的自动审批，可评估该实验性功能。当前版本仍会跟进 DSH 兼容（最近实测 **0.1.7-rc.2**）。
+
+> **兼容性**：v0.5.3 支持 DSH **0.1.5-rc.1+**，已在 **0.1.5-rc.1 / 0.1.5-rc.2 / 0.1.6-alpha.2 / 0.1.7-rc.1 / 0.1.7-rc.2** 实测（真实-Cordis 探针通过；设置子系统已迁移至 0.1.7 的 `SettingsForms`——插件 Config schema + volatile 热更 + 自建设置页；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取）。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
 
 ---
 

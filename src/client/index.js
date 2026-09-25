@@ -16,9 +16,10 @@ import { bindSnapshotSelector } from './bind.js';
 
 /**
  * Services required by these slot registrations (dsh.client.inject is the same
- * short-name set): slots, locale, connection, remote.
+ * short-name set): slots, locale, connection, remote, remote.llm. The dotted
+ * `remote.llm` namespace carries the provider/model directory on 0.1.7+.
  */
-export const inject = ['slots', 'locale', 'connection', 'remote'];
+export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.llm'];
 
 /**
  * Register the YOLO section/chip/popup once the slot declarations are on the
@@ -37,8 +38,10 @@ export function apply(ctx) {
   const t = ctx.locale.bind(NS);
   const store = new YoloStore({
     rpc: connection.rpc,
-    // The provider/model directory rides connection.api.llm (mirroring the
-    // reference subagent-director client); older transports may lack `api`.
+    // 0.1.7+ reads the provider/model directory from the client Remote service
+    // (remote.llm / remote.session); `connection.api.llm` is the legacy face for
+    // older transports and only used when the Remote namespace is absent.
+    remote: ctx.get('remote') ?? null,
     llm: connection.api ? connection.api.llm : null,
   });
   // The store is a bare observable (subscribe/getSnapshot) → bind it directly.

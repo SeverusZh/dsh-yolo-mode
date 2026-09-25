@@ -16,6 +16,7 @@ import {
   markConflict,
   adoptRevision,
   classifyMutateError,
+  joinProviderDirectory,
 } from './store-logic.js';
 
 /** Channel + endpoints under the plugin's self-published bridge. */
@@ -36,9 +37,9 @@ export function initialYoloState() {
     writable: true,
     error: undefined,
     open: false,
-    /** Configurable provider directory (llm.providers). */
+    /** Provider directory: remote.llm joined rows, or legacy llm.providers. */
     providers: [],
-    /** Model catalog groups (llm.models). */
+    /** Model catalog groups: remote.session.modelCatalog, or legacy llm.models. */
     models: [],
   };
 }
@@ -50,14 +51,20 @@ export function initialYoloState() {
  * @param {{ call: (channel: string, endpoint: string, payload: any) => Promise<any> }} options.rpc
  *   rpc.call(channel, endpoint, payload) resolves to { ok: true, value } |
  *   { ok: false, error }.
- * @param {object|null} [options.llm] - optional `connection.api.llm` face
+ * @param {object|null} [options.llm] - optional legacy `connection.api.llm` face
  *   ({ providers(), models() } returning { result: { ok, value } }); when null
  *   the directory stays empty and the judge fields fall back to free text.
+ * @param {object|null} [options.remote] - optional client Remote service; when
+ *   it carries an `llm` namespace the directory comes from
+ *   `llm.listProviders()` + `llm.listConfigurableProviders()` (0.1.7+) and the
+ *   model catalog from `session.modelCatalog()`. Falls back to `llm` when the
+ *   Remote namespace is absent.
  */
 export class YoloStore {
-  constructor({ rpc, llm }) {
+  constructor({ rpc, llm, remote }) {
     this.rpc = rpc;
     this.llm = llm == null ? null : llm;
+    this.remote = remote == null ? null : remote;
     this._state = initialYoloState();
     this._listeners = new Set();
     this._generation = 0;
@@ -108,12 +115,66 @@ export class YoloStore {
   }
 
   /**
-   * Fetch the optional LLM directory (provider list + model catalog) when the
-   * store was constructed with an llm face. Directory failures are NOT fatal:
-   * they leave the snapshot's providers/models empty without flipping status
-   * to 'error' — only the settings/status bridge calls can do that.
+   * Fetch the optional LLM directory (provider list + model catalog).
+   *
+   * 0.1.7+ exposes it through the client Remote service: the provider directory
+   * is the join of `remote.llm.listProviders()` (registered routes) and
+   * `remote.llm.listConfigurableProviders()` (declared providers), and the model
+   * catalog is `remote.session.modelCatalog().value.groups` — the same sources
+   * the official settings-models page reads. Older hosts without a Remote `llm`
+   * namespace fall back to the legacy `connection.api.llm` face.
+   *
+   * Directory failures are NOT fatal: they leave the snapshot's providers/models
+   * empty without flipping status to 'error' — only the settings/status bridge
+   * calls can do that.
    */
   async _fetchLlmDirectory() {
+    const fromRemote = await this._fetchRemoteDirectory();
+    if (fromRemote !== undefined) return fromRemote;
+    return await this._fetchLegacyDirectory();
+  }
+
+  /**
+   * Read the directory from the client Remote service. Returns undefined when
+   * no `remote.llm` namespace is present, so the caller can fall back.
+   */
+  async _fetchRemoteDirectory() {
+    const llm = this.remote ? this.remote.llm : null;
+    if (llm === null || llm === undefined) return undefined;
+
+    let providers = [];
+    let models = [];
+    try {
+      const [registered, declared] = await Promise.all([
+        typeof llm.listProviders === 'function' ? llm.listProviders() : undefined,
+        typeof llm.listConfigurableProviders === 'function' ? llm.listConfigurableProviders() : undefined,
+      ]);
+      const registeredValue = registered && registered.ok === true && Array.isArray(registered.value)
+        ? registered.value
+        : [];
+      const declaredValue = declared && declared.ok === true && Array.isArray(declared.value)
+        ? declared.value
+        : [];
+      providers = joinProviderDirectory(registeredValue, declaredValue);
+    } catch {
+      providers = [];
+    }
+
+    const session = this.remote ? this.remote.session : null;
+    if (session && typeof session.modelCatalog === 'function') {
+      try {
+        const response = await session.modelCatalog();
+        const value = response && response.ok === true ? response.value : undefined;
+        if (value && Array.isArray(value.groups)) models = value.groups;
+      } catch {
+        models = [];
+      }
+    }
+    return { providers, models };
+  }
+
+  /** Legacy directory read for hosts whose transport still exposes `api.llm`. */
+  async _fetchLegacyDirectory() {
     if (this.llm === null || this.llm === undefined) {
       return { providers: [], models: [] };
     }
