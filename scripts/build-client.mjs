@@ -13,13 +13,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 
-// Resolve rolldown from the local node_modules first, falling back to the
-// reference project's node_modules on the dev machine.
+// Resolve rolldown from this project's own node_modules. Fail with an
+// actionable message instead of falling back to a machine-specific path, so a
+// fresh checkout builds reproducibly with `npm ci && npm run build`.
 let mod;
 try {
   mod = require('rolldown');
-} catch {
-  mod = createRequire('E:/MyProjectCollection/Plugins/dsh-subagents-options/package.json')('rolldown');
+} catch (error) {
+  throw new Error(
+    "build-client: cannot resolve 'rolldown'. Run `npm ci` (or `npm install`) in this package first.\n"
+    + 'Underlying error: ' + (error && error.message ? error.message : String(error)),
+  );
 }
 const { rolldown } = mod;
 
