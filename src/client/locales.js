@@ -9,7 +9,8 @@ export const NS = 'settings.yoloMode';
 
 /** English dictionary. */
 export const en = {
-  nav: 'YOLO Approval',
+  tabConfig: 'Configuration',
+  tabStatus: 'Status & log',
   chip: 'YOLO status',
   sectionIntro: 'Configure how YOLO mode auto-judges sandbox escalation approval requests.',
   loadError: 'Could not load YOLO mode settings.',
@@ -72,7 +73,8 @@ export const en = {
 
 /** Chinese dictionary. */
 export const zh = {
-  nav: 'YOLO 审批',
+  tabConfig: '配置',
+  tabStatus: '状态与日志',
   chip: 'YOLO 状态',
   sectionIntro: '配置 YOLO 模式如何自动裁决沙箱升权审批申请。',
   loadError: '无法加载 YOLO 模式设置。',

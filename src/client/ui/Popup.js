@@ -1,13 +1,19 @@
 /**
- * YOLO mode status popup (slot `shell.overlay`). Renders null while the store's
- * open flag is false; otherwise a stats card plus the recent decisions table
- * (paged, PAGE_SIZE per page, newest first), an "open audit log" button, and a
- * refresh button.
+ * YOLO mode panel (slot `shell.overlay`). Renders null while the store's open
+ * flag is false. When open it hosts TWO tabs and is the plugin's single
+ * configuration surface (the DSH `settings.section` page was retired):
  *
- * Guard/hook split mirrors SettingsSection: the outer component validates the
- * slot inject face, the inner component owns all hooks unconditionally.
+ *  - `config` (default): the full configuration form (preset / modes / judge
+ *    provider+model / timeout / maxTokens / concurrency / system prompt /
+ *    levels), reusing ./ConfigForm.js.
+ *  - `status`: the stats card, the recent decisions table (paged, PAGE_SIZE per
+ *    page, newest first), the "open audit log" button and a refresh button.
+ *
+ * Guard/hook split mirrors ConfigForm: the outer component validates the slot
+ * inject face, the inner component owns all hooks unconditionally.
  */
 import { useState, useEffect, createElement as h } from 'react';
+import { ConfigForm } from './ConfigForm.js';
 
 /** Rows per page of the recent-decisions table. */
 const PAGE_SIZE = 5;
@@ -74,6 +80,26 @@ const captionStyle = { margin: 0, color: '#6b7280', fontSize: 11, lineHeight: '1
 const logResultOk = { color: '#16a34a' };
 const logResultErr = { color: '#dc2626' };
 
+/** Body wrapper for the status tab (the config tab renders ConfigForm directly). */
+const statusBodyStyle = { display: 'flex', flexDirection: 'column', gap: 12 };
+
+const tabStyle = {
+  backgroundColor: '#ffffff', color: '#374151', border: '1px solid #cbd5e1',
+  borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
+};
+const tabActiveStyle = { backgroundColor: '#2563eb', color: '#ffffff', borderColor: '#2563eb' };
+
+/** One panel tab switch; the active tab is highlighted and non-submit. */
+function tabButton(t, id, current, setTab) {
+  const active = id === current;
+  return h('button', {
+    key: id,
+    type: 'button',
+    style: Object.assign({}, tabStyle, active ? tabActiveStyle : {}),
+    onClick: () => setTab(id),
+  }, t(id === 'config' ? 'tabConfig' : 'tabStatus'));
+}
+
 /** Truncate long reason text for display. */
 function truncate(text, max) {
   if (typeof text !== 'string') return '';
@@ -94,6 +120,10 @@ export function Popup(props) {
 function ReactPopup({ store, useSnapshot, t }) {
   const state = useSnapshot((s) => s);
 
+  // ---- tab state (hooks before any conditional return) ----
+  // The panel is the plugin's only configuration surface, so it opens on the
+  // configuration tab; the stats/log view stays one click away.
+  const [tab, setTab] = useState('config');
   // ---- paging state (hooks before any conditional return) ----
   const [page, setPage] = useState(0);
   // ---- open-log feedback state ----
@@ -140,19 +170,8 @@ function ReactPopup({ store, useSnapshot, t }) {
     }
   };
 
-  return h('div', { style: popupStyle },
-    h('div', { style: headerStyle },
-      h('strong', {}, t('chip')),
-      h('div', { style: headerButtons },
-        h('button', {
-          style: logBusy ? Object.assign({}, secondaryButton, { opacity: 0.6 }) : secondaryButton,
-          onClick: () => void openLog(),
-          title: auditFile !== undefined ? auditFile : undefined,
-        }, logBusy ? t('openLogBusy') : t('openLog')),
-        h('button', { style: primaryButton, onClick: () => void store.load() }, t('refresh')),
-      ),
-    ),
-
+  // Status-tab body: open-log feedback, stats, decisions table, pager, close.
+  const statusBody = [
     // Open-log feedback line.
     logResult !== undefined
       ? h('p', { style: Object.assign({}, captionStyle, logResult.ok ? logResultOk : logResultErr) },
@@ -208,6 +227,29 @@ function ReactPopup({ store, useSnapshot, t }) {
     h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
       h('button', { style: primaryButton, onClick: () => store.togglePopup() }, t('close')),
     ),
+  ];
+
+  return h('div', { style: popupStyle },
+    h('div', { style: headerStyle },
+      h('strong', {}, t('chip')),
+      h('div', { style: headerButtons },
+        tabButton(t, 'config', tab, setTab),
+        tabButton(t, 'status', tab, setTab),
+        // The log button belongs to the status view only.
+        tab === 'status'
+          ? h('button', {
+              style: logBusy ? Object.assign({}, secondaryButton, { opacity: 0.6 }) : secondaryButton,
+              onClick: () => void openLog(),
+              title: auditFile !== undefined ? auditFile : undefined,
+            }, logBusy ? t('openLogBusy') : t('openLog'))
+          : null,
+        h('button', { style: primaryButton, onClick: () => void store.load() }, t('refresh')),
+      ),
+    ),
+
+    tab === 'config'
+      ? h(ConfigForm, { store, useSnapshot, t, close: () => store.togglePopup() })
+      : h('div', { style: statusBodyStyle }, ...statusBody),
   );
 }
 

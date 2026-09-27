@@ -1,6 +1,8 @@
 /**
- * YOLO mode settings section (slot `settings.section`). Renders the resolved
- * configuration (view.value) into a form and saves via path ops through
+ * YOLO mode configuration form. Rendered inside the plugin's own UI panel
+ * (`shell.overlay`, see ./Popup.js): the DSH `settings.section` page was retired
+ * so this form is the single configuration surface for the plugin. It renders
+ * the resolved configuration (view.value) and saves via path ops through
  * store.mutate with an optimistic-revision lock. Everything is React.createElement
  * + inline styles (no JSX, no CSS modules).
  *
@@ -100,12 +102,12 @@ const styles = {
 };
 
 /**
- * The YOLO settings section.
+ * The YOLO configuration form (hosted by the plugin's own UI panel).
  *
- * @param {object} props - slot-delivered inject face: { store, useSnapshot, t }
- *   plus optional ownerProps.close.
+ * @param {object} props - panel-delivered inject face: { store, useSnapshot, t }
+ *   plus optional close() to dismiss the hosting panel.
  */
-export function SettingsSection(props) {
+export function ConfigForm(props) {
   const { store, useSnapshot, t, close } = props;
   if (store === undefined || useSnapshot === undefined || t === undefined) return null;
   return ReactSection({ store, useSnapshot, t, close });

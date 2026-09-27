@@ -1,15 +1,15 @@
 /**
  * YOLO mode — browser half (DSH client plugin).
  *
- * Registers the `settings.section` page (id 'yolo-mode') that configures the
- * preset/modes/judge/levels, the `conversation.input.left` status chip, and the
- * `shell.overlay` stats/recent popup. Data flows through the connection's
- * generic RPC channel (/yolo-mode) into a snapshot store; writes travel as path
- * ops through settingsMutate with an optimistic-revision lock.
+ * Registers the `conversation.input.left` status chip and the `shell.overlay`
+ * panel. ALL configuration (preset/modes/judge/levels) lives in that panel: the
+ * `settings.section` page was retired, so nothing is configured from the DSH
+ * Settings surface any more. Data flows through the connection's generic RPC
+ * channel (/yolo-mode) into a snapshot store; writes travel as path ops through
+ * settingsMutate with an optimistic-revision lock.
  */
 import { en, zh, NS } from './locales.js';
 import { YoloStore } from './store.js';
-import { SettingsSection } from './ui/SettingsSection.js';
 import { Chip } from './ui/Chip.js';
 import { Popup } from './ui/Popup.js';
 import { bindSnapshotSelector } from './bind.js';
@@ -22,8 +22,8 @@ import { bindSnapshotSelector } from './bind.js';
 export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.llm'];
 
 /**
- * Register the YOLO section/chip/popup once the slot declarations are on the
- * ledger, wire the store to the connection, and keep it fresh on every pushed
+ * Register the YOLO chip/panel once the slot declarations are on the ledger,
+ * wire the store to the connection, and keep it fresh on every pushed
  * invalidation.
  *
  * @param {object} ctx - client cordis context.
@@ -67,20 +67,6 @@ export function apply(ctx) {
   }, 'yolo-mode: pushed invalidations');
 
   const injected = () => ({ store, useSnapshot, t });
-
-  ctx.slots.inject('settings.section', () =>
-    ctx.slots.register(
-      {
-        name: 'settings.section',
-        id: 'yolo-mode',
-        order: 25,
-        label: () => t('nav'),
-        locale: NS,
-        inject: injected,
-      },
-      SettingsSection,
-    ),
-  );
 
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register(
