@@ -22,10 +22,14 @@ import { bindSnapshotSelector } from './bind.js';
 
 /**
  * Services required by these slot registrations (dsh.client.inject is the same
- * short-name set): slots, locale, connection, remote, remote.llm. The dotted
- * `remote.llm` namespace carries the provider/model directory on 0.1.7+.
+ * short-name set): slots, locale, connection, remote, remote.llm, remote.session.
+ * Both dotted Remote namespaces are REQUIRED, not optional: the client Remote
+ * proxy is inject-gated and throws `cannot get property "remote.X" without
+ * inject` on an undeclared read — it does not return undefined. The store reads
+ * `remote.llm` for the provider directory and `remote.session` for the model
+ * catalog, so both must be declared here (and in package.json's dsh.client.inject).
  */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.llm'];
+export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.llm', 'remote.session'];
 
 /**
  * Register the YOLO chip/panel once the slot declarations are on the ledger,

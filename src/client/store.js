@@ -139,7 +139,17 @@ export class YoloStore {
    * no `remote.llm` namespace is present, so the caller can fall back.
    */
   async _fetchRemoteDirectory() {
-    const llm = this.remote ? this.remote.llm : null;
+    // Both namespace reads are inject-gated: the client Remote proxy THROWS
+    // ("cannot get property remote.X without inject") when the namespace is not
+    // declared, rather than yielding undefined. The directory is optional, so a
+    // gated/failed namespace must degrade to "no directory" and must never
+    // reject load().
+    let llm = null;
+    try {
+      llm = this.remote ? this.remote.llm : null;
+    } catch {
+      llm = null;
+    }
     if (llm === null || llm === undefined) return undefined;
 
     let providers = [];
@@ -160,7 +170,12 @@ export class YoloStore {
       providers = [];
     }
 
-    const session = this.remote ? this.remote.session : null;
+    let session = null;
+    try {
+      session = this.remote ? this.remote.session : null;
+    } catch {
+      session = null;
+    }
     if (session && typeof session.modelCatalog === 'function') {
       try {
         const response = await session.modelCatalog();
@@ -206,11 +221,28 @@ export class YoloStore {
   async load() {
     const generation = ++this._generation;
     this.set({ status: 'loading', error: undefined });
-    const [viewResult, statusResult, directory] = await Promise.all([
-      this._call(YOLO_RPC_VIEW, {}),
-      this._call(YOLO_RPC_STATUS, {}),
-      this._fetchLlmDirectory(),
-    ]);
+    let viewResult;
+    let statusResult;
+    let directory;
+    try {
+      [viewResult, statusResult, directory] = await Promise.all([
+        this._call(YOLO_RPC_VIEW, {}),
+        this._call(YOLO_RPC_STATUS, {}),
+        this._fetchLlmDirectory(),
+      ]);
+    } catch (error) {
+      // A rejected bridge/transport call must not leave the page stuck on
+      // 'loading' forever with no explanation — surface it as an error instead.
+      if (generation !== this._generation) return;
+      this.set({
+        status: 'error',
+        error: error !== null && typeof error === 'object' && typeof error.message === 'string'
+          ? error.message
+          : true,
+        conflicted: false,
+      });
+      return;
+    }
     if (generation !== this._generation) return;
 
     if (!viewResult.ok || !statusResult.ok) {

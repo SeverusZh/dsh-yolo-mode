@@ -471,6 +471,59 @@ test('YoloStore: remote.llm 目录调用抛错 → 置空数组且 status 仍 re
   assert.deepEqual(snap.models, [])
 })
 
+test('YoloStore: remote.session 属性读取抛错（inject 门禁）→ 目录降级为空且 status 仍 ready', async () => {
+  // 复刻 DSH 客户端 Remote 代理的真实行为：未在 inject 中声明的命名空间，
+  // 读属性时直接抛错。这个 bug 曾把 status 永久钉在 'loading'。
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  })
+  const remote = {
+    llm: {
+      listProviders: async () => ({ ok: true, value: [{ id: 'deepseek-official', name: 'DeepSeek Official' }] }),
+      listConfigurableProviders: async () => ({ ok: true, value: [] }),
+    },
+    get session() {
+      throw new Error('cannot get property "remote.session" without inject')
+    },
+  }
+  const store = new YoloStore({ rpc, remote })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.status, 'ready', 'remote.session 抛错不应让 load 卡住或报错')
+  assert.equal(snap.providers.length, 1, '供应商目录仍应可用')
+  assert.deepEqual(snap.models, [], '模型目录降级为空')
+})
+
+test('YoloStore: remote.llm 属性读取抛错（inject 门禁）→ 回退 legacy，status 仍 ready', async () => {
+  const rpc = makeFakeRpc({
+    settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced' }, secrets: [] }),
+    statusView: () => statusOk({ preset: 'balanced' }),
+  })
+  const remote = {
+    get llm() {
+      throw new Error('cannot get property "remote.llm" without inject')
+    },
+  }
+  const store = new YoloStore({ rpc, remote })
+  await store.load()
+  assert.equal(store.getSnapshot().status, 'ready')
+})
+
+test('YoloStore: 桥调用 reject → status=error 且带原因（不再永久停在 loading）', async () => {
+  const rpc = {
+    call: async () => {
+      throw new Error('transport failure for /yolo-mode/settingsView: HTTP 404')
+    },
+  }
+  const store = new YoloStore({ rpc })
+  await store.load()
+  const snap = store.getSnapshot()
+  assert.equal(snap.status, 'error', '传输失败必须显式报错，而不是停在 loading')
+  assert.notEqual(snap.status, 'loading')
+  assert.match(String(snap.error), /transport failure/, '错误信息应保留原因')
+})
+
 test('YoloStore: remote 存在但无 llm 命名空间 → 回退 legacy connection.api.llm', async () => {
   const rpc = makeFakeRpc({
     settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'off' }, secrets: [] }),
@@ -690,10 +743,12 @@ function createFakeCtx() {
   return { state, ctx }
 }
 
-test('构建产物: exports.apply 与 exports.inject 存在', () => {
+test('构建产物: exports.apply 与 exports.inject 存在（两个 Remote 命名空间都必须声明）', () => {
   const mod = loadBundle()
   assert.equal(typeof mod.apply, 'function')
-  assert.deepEqual(mod.inject, ['slots', 'locale', 'connection', 'remote', 'remote.llm'])
+  // `remote.session` 是必需的：客户端 Remote 代理按 inject 声明做门禁，未声明就抛
+  // `cannot get property "remote.session" without inject`（不是返回 undefined）。
+  assert.deepEqual(mod.inject, ['slots', 'locale', 'connection', 'remote', 'remote.llm', 'remote.session'])
 })
 
 test('构建产物: apply 在缺少 connection 时静默返回（不注册）', () => {

@@ -2,6 +2,39 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.6.2] - 2026-09-27
+
+### 修复：插件详情页的配置卡在引言、表单永不出现
+
+现象：0.6.1 起配置区块已出现在插件详情页，但只画出引言一句，表单始终不渲染。
+
+根因（浏览器控制台实锤）：
+
+```
+Uncaught (in promise) Error: cannot get property "remote.session" without inject
+    at YoloStore._fetchRemoteDirectory (store.js)
+    at async Promise.all (index 2)
+    at async YoloStore.load (store.js)
+```
+
+- `_fetchRemoteDirectory()` 中的 `this.remote.session` 在 **try 块之外**，而客户端的 Remote
+  代理是**按 inject 声明做门禁**的：读取未声明的命名空间会**抛错**，而不是返回 undefined。
+  插件当时只声明了 `remote.llm`，**漏了 `remote.session`**。
+- 而 `load()` 的 `Promise.all` **没有 try/catch**，这一抛就把 `status` 永久钉在 `loading`：
+  界面既不显示表单、也不显示错误，只剩引言那一句（这个静默失败本身也是缺陷）。
+
+修复：
+
+- `dsh.client.inject` 与源码的 `inject` 导出都补上 **`remote.session`**（`remote.llm` 同理，
+  两个命名空间都必须声明，缺一即抛）。
+- `store.js`：两处 Remote 命名空间属性读取移入 `try/catch`，缺失时**降级为「无目录」**，
+  不再 reject `load()`。
+- `store.js`：`load()` 整体包 `try/catch`，桥/传输 reject 时置 `status:'error'` 并保留原因，
+  不再静默停在 `loading`。
+- 测试 +3（**141/141**）：inject 必须含两个 Remote 命名空间；`remote.session` /
+  `remote.llm` 属性读取抛错时目录降级且 `status` 仍 `ready`；桥 reject 时 `status='error'`
+  且带原始原因。
+
 ## [0.6.1] - 2026-09-27
 
 ### 修复：配置位置改到插件详情页（0.6.0 放错了地方）
