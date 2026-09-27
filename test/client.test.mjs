@@ -713,7 +713,7 @@ test('构建产物: apply 在缺少 connection 时静默返回（不注册）', 
   assert.doesNotThrow(() => mod.apply(ctx))
 })
 
-test('构建产物: apply 注册 locale + 两个 inject 键 + register 参数（settings.section 已退役）', () => {
+test('构建产物: apply 注册 locale + 三个 inject 键 + register 参数（配置在插件详情页，settings.section 已退役）', () => {
   const mod = loadBundle()
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
@@ -723,19 +723,27 @@ test('构建产物: apply 注册 locale + 两个 inject 键 + register 参数（
   assert.equal(state.localeRegistrations[0].ns, 'settings.yoloMode')
   assert.ok(state.localeRegistrations[0].dicts.zh && state.localeRegistrations[0].dicts.en)
 
-  // 仅剩 input.left 与 shell.overlay：全部配置移入插件自身的 shell.overlay 面板，
-  // settings.section 页面已退役，因此不再向 DSH 设置面板注册任何 slot。
-  assert.deepEqual(state.injectedKeys, ['conversation.input.left', 'shell.overlay'])
-  assert.equal(state.registered.length, 2)
+  // 配置注册进插件管理页声明的 plugins.bundle.config（以 npm 包名为 key），
+  // 从而渲染在「插件列表 → dsh-yolo-mode」页面的描述与组件行之间；
+  // settings.section 已退役，不再向 DSH 设置面板注册任何 slot。
+  assert.deepEqual(state.injectedKeys, ['plugins.bundle.config', 'conversation.input.left', 'shell.overlay'])
+  assert.equal(state.registered.length, 3)
 
-  const chip = state.registered[0]
+  const config = state.registered[0]
+  assert.equal(config.opts.name, 'plugins.bundle.config')
+  assert.equal(config.opts.key, 'dsh-yolo-mode')
+  assert.equal(config.opts.locale, 'settings.yoloMode')
+  assert.equal(typeof config.opts.inject, 'function')
+  assert.equal(typeof config.renderer, 'function')
+
+  const chip = state.registered[1]
   assert.equal(chip.opts.name, 'conversation.input.left')
   assert.equal(chip.opts.id, 'yolo-mode-chip')
   assert.equal(chip.opts.locale, 'settings.yoloMode')
   assert.equal(typeof chip.opts.inject, 'function')
   assert.equal(typeof chip.renderer, 'function')
 
-  const popup = state.registered[1]
+  const popup = state.registered[2]
   assert.equal(popup.opts.name, 'shell.overlay')
   assert.equal(popup.opts.id, 'yolo-mode-popup')
   assert.equal(popup.opts.locale, 'settings.yoloMode')
@@ -770,21 +778,20 @@ test('构建产物: 渲染函数可调用且返回元素或 null', () => {
   const t = injected.t
 
   // chip 渲染为 button，文案含 "YOLO "。
-  const chipEl = state.registered[0].renderer({ store, useSnapshot, t })
+  const chipEl = state.registered[1].renderer({ store, useSnapshot, t })
   assert.equal(chipEl.type, 'button')
   const chipText = flattenText(chipEl)
   assert.ok(chipText.startsWith('YOLO '))
 
-  // Popup 默认 store.open=false → 渲染 null。
-  assert.equal(state.registered[1].renderer({ store, useSnapshot, t }), null)
+  // Popup 默认 store.open=false → 渲染 null（面板只承载统计与日志）。
+  assert.equal(state.registered[2].renderer({ store, useSnapshot, t }), null)
 
-  // 打开面板 → 默认 config 标签渲染配置表单（SettingsSection 已并入面板）。
-  store.togglePopup()
+  // 插件详情页配置入口：view='page' 渲染配置表单，view='summary' 不渲染。
   assert.doesNotThrow(() => {
-    const el = state.registered[1].renderer({ store, useSnapshot, t })
-    assert.ok(el, '面板打开后应返回非 null')
+    const el = state.registered[0].renderer({ view: 'page', store, useSnapshot, t })
+    assert.ok(el, '插件页配置应返回非 null')
   })
-  store.togglePopup()
+  assert.equal(state.registered[0].renderer({ view: 'summary', store, useSnapshot, t }), null)
 })
 
 test('构建产物: Popup 分页 + 打开日志（20 条 → 5 条/页，翻页器与日志按钮）', async () => {
@@ -792,11 +799,11 @@ test('构建产物: Popup 分页 + 打开日志（20 条 → 5 条/页，翻页�
   const mod = loadBundle(react)
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
-  const t = state.registered[1].opts.inject().t
+  const t = state.registered[2].opts.inject().t
   const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
   const render = () => {
     react.resetHooks() // render pass 边界
-    return expandComponents(state.registered[1].renderer({ store, useSnapshot: snapOf(store), t }))
+    return state.registered[2].renderer({ store, useSnapshot: snapOf(store), t })
   }
 
   const recent = Array.from({ length: 20 }, (_, i) => ({
@@ -826,11 +833,9 @@ test('构建产物: Popup 分页 + 打开日志（20 条 → 5 条/页，翻页�
   assert.equal(render(), null)
   store.togglePopup()
 
-  // 面板默认打开 config 标签；切到 status 标签后才渲染统计与日志表。
+  // 面板（shell.overlay）只承载统计与日志。
   let el = render()
   assert.ok(el, '打开状态应渲染面板')
-  findButtonByText(el, t('tabStatus')).props.onClick()
-  el = render()
 
   // 第一页：5 行；翻页器可见；打开日志按钮与日志路径标题存在
   const tbody = firstChildOfType(el, 'tbody')
@@ -869,59 +874,56 @@ test('构建产物: Popup 分页 + 打开日志（20 条 → 5 条/页，翻页�
   assert.ok(flattenText(el).includes(t('openLogOk')), '打开成功应显示提示')
 })
 
-test('构建产物: 面板默认 config 标签，可与 status 标签互切（配置不再位于设置面板）', async () => {
+test('构建产物: 配置注册在插件详情页（plugins.bundle.config），不再位于胶囊面板', async () => {
   const react = createStatefulFakeReact()
   const mod = loadBundle(react)
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
-  const t = state.registered[1].opts.inject().t
+  const configEntry = state.registered[0]
+  const t = configEntry.opts.inject().t
   const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
-  const render = () => {
-    react.resetHooks()
-    return expandComponents(state.registered[1].renderer({ store, useSnapshot: snapOf(store), t }))
-  }
   const store = new YoloStore({ rpc: makeFakeRpc({
     settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', modes: [], levels: {}, judge: {} }, secrets: [] }),
     statusView: () => statusOk({ preset: 'balanced' }),
   }) })
   await store.load()
+
+  // 插件管理页以「包名」为 key 派发；只有注册了这个 key，页面才渲染配置区块
+  // （dsh-client-ui-plugin-manager: configured = ledger.bundles.has(pkg.name)）。
+  assert.equal(configEntry.opts.name, 'plugins.bundle.config')
+  assert.equal(configEntry.opts.key, 'dsh-yolo-mode')
+
+  react.resetHooks()
+  const el = expandComponents(configEntry.renderer({ view: 'page', store, useSnapshot: snapOf(store), t }))
+  assert.ok(findFieldByLabel(el, t('preset')), '插件页应渲染配置表单的 preset 字段')
+  assert.ok(findFieldByLabel(el, t('provider')), '插件页应渲染 provider 字段')
+  assert.ok(findFieldByLabel(el, t('model')), '插件页应渲染 model 字段')
+  assert.equal(firstChildOfType(el, 'tbody'), null, '配置表单不应渲染裁决表')
+
+  // 胶囊面板不再承载配置：打开后只有统计与日志。
   store.togglePopup()
-
-  // 默认 config：渲染完整配置表单，不渲染决策表。
-  let el = render()
-  assert.ok(findFieldByLabel(el, t('preset')), '默认标签应渲染配置表单的 preset 字段')
-  assert.ok(findFieldByLabel(el, t('provider')), '默认标签应渲染 provider 字段')
-  assert.equal(firstChildOfType(el, 'tbody'), null, 'config 标签不应渲染决策表')
-
-  // 切到 status：渲染统计与日志，不再有配置字段。
-  findButtonByText(el, t('tabStatus')).props.onClick()
-  el = render()
-  assert.equal(findFieldByLabel(el, t('preset')), null, 'status 标签不应渲染配置字段')
-  assert.ok(flattenText(el).includes(t('statsTotal')), 'status 标签应渲染统计')
-
-  // 切回 config：配置表单再次出现。
-  findButtonByText(el, t('tabConfig')).props.onClick()
-  el = render()
-  assert.ok(findFieldByLabel(el, t('preset')), '切回 config 应再次渲染配置表单')
+  react.resetHooks()
+  const popupEl = state.registered[2].renderer({ store, useSnapshot: snapOf(store), t })
+  assert.ok(flattenText(popupEl).includes(t('statsTotal')), '面板应渲染统计')
+  assert.equal(findFieldByLabel(popupEl, t('preset')), null, '面板不应再渲染配置字段')
 })
 
-test('构建产物: ConfigForm（面板 config 标签）ready 时按 writable 禁用保存按钮', async () => {
+test('构建产物: ConfigForm（插件详情页）ready 时按 writable 禁用保存按钮', async () => {
   const mod = loadBundle()
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
-  const injected = state.registered[1].opts.inject()
+  const injected = state.registered[0].opts.inject()
   const t = injected.t
   // 与 bindSnapshotSelector 相同语义：读取快照并按需套选择器。
   const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
 
-  // 可写：ready 渲染出保存按钮且可用（面板默认 config 标签，需先打开）
+  // 可写：ready 渲染出保存按钮且可用
   const writableStore = new YoloStore({ rpc: makeFakeRpc({
     settingsView: () => viewOk({ ns: 'yolo-mode', revision: 1, value: { preset: 'balanced', modes: [], levels: {}, judge: {} }, secrets: [] }),
     statusView: () => statusOk({ preset: 'balanced' }),
   }) })
   await writableStore.load()
-  writableStore.togglePopup()
-  const el1 = expandComponents(state.registered[1].renderer({ store: writableStore, useSnapshot: snapOf(writableStore), t }))
+  const el1 = expandComponents(state.registered[0].renderer({ view: 'page', store: writableStore, useSnapshot: snapOf(writableStore), t }))
   const save1 = findButtonByText(el1, t('save'))
   assert.ok(save1, 'ready 渲染应包含保存按钮')
   assert.equal(save1.props.disabled, false)
@@ -932,8 +934,7 @@ test('构建产物: ConfigForm（面板 config 标签）ready 时按 writable �
     statusView: () => statusOk({ preset: 'balanced' }),
   }) })
   await roStore.load()
-  roStore.togglePopup()
-  const el2 = expandComponents(state.registered[1].renderer({ store: roStore, useSnapshot: snapOf(roStore), t }))
+  const el2 = expandComponents(state.registered[0].renderer({ view: 'page', store: roStore, useSnapshot: snapOf(roStore), t }))
   const save2 = findButtonByText(el2, t('save'))
   assert.ok(save2, '只读 ready 渲染仍包含保存按钮')
   assert.equal(save2.props.disabled, true)
@@ -943,7 +944,7 @@ test('构建产物: ConfigForm 在含 providers/models 快照下渲染 provider/
   const mod = loadBundle()
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
-  const injected = state.registered[1].opts.inject()
+  const injected = state.registered[0].opts.inject()
   const t = injected.t
   const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
 
@@ -969,8 +970,7 @@ test('构建产物: ConfigForm 在含 providers/models 快照下渲染 provider/
   await store.load()
   assert.equal(store.getSnapshot().status, 'ready')
 
-  store.togglePopup()
-  const el = expandComponents(state.registered[1].renderer({ store, useSnapshot: snapOf(store), t }))
+  const el = expandComponents(state.registered[0].renderer({ view: 'page', store, useSnapshot: snapOf(store), t }))
   assert.ok(el, 'ready 渲染应返回元素')
 
   // provider 字段 → select，含留空选项与目录中的 providers
@@ -1007,7 +1007,7 @@ test('构建产物: ConfigForm 无目录（llm 缺失）时 model 退回文本�
   const mod = loadBundle()
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
-  const injected = state.registered[1].opts.inject()
+  const injected = state.registered[0].opts.inject()
   const t = injected.t
   const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
 
@@ -1017,8 +1017,7 @@ test('构建产物: ConfigForm 无目录（llm 缺失）时 model 退回文本�
   }) })
   await store.load()
 
-  store.togglePopup()
-  const el = expandComponents(state.registered[1].renderer({ store, useSnapshot: snapOf(store), t }))
+  const el = expandComponents(state.registered[0].renderer({ view: 'page', store, useSnapshot: snapOf(store), t }))
   const modelRow = findFieldByLabel(el, t('model'))
   assert.ok(modelRow, 'model 字段应存在')
   const modelInput = firstChildOfType(modelRow, 'input')
@@ -1032,12 +1031,12 @@ test('构建产物: ConfigForm 在 statusInfo 含 presetDefaults 的 fake 快照
   const mod = loadBundle(react)
   const { state, ctx } = createFakeCtx()
   mod.apply(ctx)
-  const injected = state.registered[1].opts.inject()
+  const injected = state.registered[0].opts.inject()
   const t = injected.t
   const snapOf = (s) => (selector) => (selector ? selector(s.getSnapshot()) : s.getSnapshot())
   const render = () => {
     react.resetHooks() // render pass 边界：hook 游标归零、状态保留
-    return expandComponents(state.registered[1].renderer({ store, useSnapshot: snapOf(store), t }))
+    return expandComponents(state.registered[0].renderer({ view: 'page', store, useSnapshot: snapOf(store), t }))
   }
 
   const strictDefaults = {
@@ -1051,9 +1050,6 @@ test('构建产物: ConfigForm 在 statusInfo 含 presetDefaults 的 fake 快照
   await store.load()
   assert.equal(store.getSnapshot().status, 'ready')
   assert.equal(store.getSnapshot().statusInfo.presetDefaults.strict.systemPrompt, 'SP-STRICT')
-
-  // 面板默认 config 标签；打开后渲染表单。
-  store.togglePopup()
 
   // fake 快照（statusInfo 含 presetDefaults）下渲染不抛错
   let el = render()
@@ -1090,10 +1086,9 @@ test('构建产物: ConfigForm 在 statusInfo 含 presetDefaults 的 fake 快照
     statusView: () => statusOk({ preset: 'balanced' }),
   }) })
   await plain.load()
-  plain.togglePopup()
   assert.doesNotThrow(() => {
     react.resetHooks()
-    const el2 = expandComponents(state.registered[1].renderer({ store: plain, useSnapshot: snapOf(plain), t }))
+    const el2 = expandComponents(state.registered[0].renderer({ view: 'page', store: plain, useSnapshot: snapOf(plain), t }))
     assert.ok(el2, '缺省 presetDefaults 的渲染应返回元素')
   })
 })

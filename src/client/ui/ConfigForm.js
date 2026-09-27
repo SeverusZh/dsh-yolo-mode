@@ -1,6 +1,8 @@
 /**
- * YOLO mode configuration form. Rendered inside the plugin's own UI panel
- * (`shell.overlay`, see ./Popup.js): the DSH `settings.section` page was retired
+ * YOLO mode configuration form. Rendered on this plugin's own page in the DSH
+ * plugin manager (插件列表 → dsh-yolo-mode), via the `plugins.bundle.config`
+ * slot keyed by the package name (see ../index.js) — between the package
+ * description and the component rows. The `settings.section` page was retired,
  * so this form is the single configuration surface for the plugin. It renders
  * the resolved configuration (view.value) and saves via path ops through
  * store.mutate with an optimistic-revision lock. Everything is React.createElement
@@ -102,14 +104,23 @@ const styles = {
 };
 
 /**
- * The YOLO configuration form (hosted by the plugin's own UI panel).
+ * The YOLO configuration form.
  *
- * @param {object} props - panel-delivered inject face: { store, useSnapshot, t }
- *   plus optional close() to dismiss the hosting panel.
+ * Hosted by this plugin's own page in the plugin manager: registered into
+ * `plugins.bundle.config` under the package name (see ../index.js). The page
+ * dispatches `view`; a bundle page only ever asks for `page`, and a bundle may
+ * hold several configuration entries, so the page passes NO host `form` — this
+ * component owns its draft, validation and save path (the /yolo-mode bridge).
+ *
+ * @param {object} props - slot props `{ view? }` merged with the inject face
+ *   `{ store, useSnapshot, t }`; an optional `close()` adds a dismiss control.
  */
 export function ConfigForm(props) {
-  const { store, useSnapshot, t, close } = props;
+  const { view, store, useSnapshot, t, close } = props;
   if (store === undefined || useSnapshot === undefined || t === undefined) return null;
+  // `summary` is reserved for official cards and row fallbacks; a bundle page
+  // never asks for it, so there is nothing meaningful to render one-liner-wise.
+  if (view === 'summary') return null;
   return ReactSection({ store, useSnapshot, t, close });
 }
 

@@ -2,6 +2,25 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.6.1] - 2026-09-27
+
+### 修复：配置位置改到插件详情页（0.6.0 放错了地方）
+
+0.6.0 把配置放进了输入框旁的 `YOLO <预设>` 胶囊浮层（`shell.overlay`）——那是**状态与日志**
+的位置，不是「插件的配置面板」。本次改用 DSH 插件管理页声明的专用槽位：
+
+- **新增 `plugins.bundle.config` 注册**（key = npm 包名 `dsh-yolo-mode`）：配置渲染在
+  「插件列表 → dsh-yolo-mode」页面的**描述与组件行之间**。该槽位是 keyed slot，页面仅在
+  有注册者（且 key 等于包名）时才渲染配置区块
+  （`dsh-client-ui-plugin-manager`：`configured = ledger.bundles.has(pkg.name)`）——
+  这正是此前该页面完全没有配置区的原因。
+- bundle 页可容纳多个条目，因此页面**不传宿主 `form`**，由本插件自持草稿、校验与保存
+  （仍走 `/yolo-mode` 设置桥 + 乐观修订锁）。`view === 'summary'` 时不渲染
+  （bundle 页只请求 `page`）。
+- **胶囊浮层回归纯状态/日志**：撤销 0.6.0 给 `shell.overlay` 加的「配置 / 状态与日志」双标签；
+  点胶囊仍是原来的统计卡 + 裁决表分页 + 打开日志 + 刷新。
+- 文案 `tabConfig` / `tabStatus` 退役（不再有标签页）；`settings.section` 保持退役。
+
 ## [0.6.0] - 2026-09-27
 
 ### 变更：全部配置移入插件自身 UI 面板（设置页退役）

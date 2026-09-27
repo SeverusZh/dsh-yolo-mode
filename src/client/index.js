@@ -1,15 +1,21 @@
 /**
  * YOLO mode — browser half (DSH client plugin).
  *
- * Registers the `conversation.input.left` status chip and the `shell.overlay`
- * panel. ALL configuration (preset/modes/judge/levels) lives in that panel: the
- * `settings.section` page was retired, so nothing is configured from the DSH
+ * Registers three slots:
+ *  - `plugins.bundle.config` (key `dsh-yolo-mode`): ALL configuration, rendered
+ *    on this plugin's own page in the plugin manager (插件列表 → dsh-yolo-mode),
+ *    between the package description and the component rows;
+ *  - `conversation.input.left`: the `YOLO <preset>` status chip;
+ *  - `shell.overlay`: the stats / recent-decisions panel that chip opens.
+ *
+ * The `settings.section` page stays retired: nothing is configured from the DSH
  * Settings surface any more. Data flows through the connection's generic RPC
  * channel (/yolo-mode) into a snapshot store; writes travel as path ops through
  * settingsMutate with an optimistic-revision lock.
  */
 import { en, zh, NS } from './locales.js';
 import { YoloStore } from './store.js';
+import { ConfigForm } from './ui/ConfigForm.js';
 import { Chip } from './ui/Chip.js';
 import { Popup } from './ui/Popup.js';
 import { bindSnapshotSelector } from './bind.js';
@@ -67,6 +73,26 @@ export function apply(ctx) {
   }, 'yolo-mode: pushed invalidations');
 
   const injected = () => ({ store, useSnapshot, t });
+
+  // Configuration lives on THIS plugin's page in the plugin manager (插件列表 →
+  // dsh-yolo-mode), between the package description and the component rows.
+  // `plugins.bundle.config` is keyed by the npm package name; the page renders
+  // the section only while that key is registered (`configured` =
+  // ledger.bundles.has(pkg.name) in dsh-client-ui-plugin-manager), which is why
+  // the section simply did not exist before. A bundle page may hold several
+  // entries, so the page passes NO `form` — the registrant owns its own draft,
+  // validation and save path (here: the /yolo-mode settings bridge).
+  ctx.slots.inject('plugins.bundle.config', () =>
+    ctx.slots.register(
+      {
+        name: 'plugins.bundle.config',
+        key: 'dsh-yolo-mode',
+        locale: NS,
+        inject: injected,
+      },
+      ConfigForm,
+    ),
+  );
 
   ctx.slots.inject('conversation.input.left', () =>
     ctx.slots.register(
