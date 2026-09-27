@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [Unreleased]
+## [0.6.0] - 2026-09-27
 
 ### 变更：全部配置移入插件自身 UI 面板（设置页退役）
 
