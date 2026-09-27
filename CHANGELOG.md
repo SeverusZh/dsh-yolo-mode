@@ -2,6 +2,36 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [Unreleased]
+
+### 变更：全部配置移入插件自身 UI 面板（设置页退役）
+
+- **移除 `settings.section` 注册**（原 id `yolo-mode`，order 25）：不再向 DSH 设置面板
+  注册任何页面，全部配置项改由插件自身的 UI 面板承载 —— 点击输入框左侧的
+  `YOLO <预设>` 胶囊打开（slot `shell.overlay`）。
+- 面板新增 **配置 / 状态与日志** 两个标签，默认打开「配置」：
+  - 「配置」渲染原设置页的完整表单（预设 / 模式 / 裁判供应商与模型 / 超时 / 最大令牌 /
+    并发 / 系统提示词 / 层级表），保存仍走 `settingsMutate` 路径操作 + 乐观锁；
+  - 「状态与日志」保留统计卡、裁决表分页、「打开日志」与「刷新」。
+- `src/client/ui/SettingsSection.js` → `src/client/ui/ConfigForm.js`（导出名
+  `ConfigForm`）；组件内部逻辑不变，仅宿主从设置页改为面板。
+- 文案 `nav` 退役，新增 `tabConfig` / `tabStatus`（中英双语）。
+
+### 修复：依赖解析与构建可复现
+
+- `peerDependencies` 移除两个**已停更**的官方包：`@deepseek-ai/dsh-host-apiproxy`
+  与 `@deepseek-ai/dsh-client-runtime`（npm 上分别止于 `0.1.1-rc.2`）。二者此前仅为
+  `import type` 引用（`verbatimModuleSyntax` 下会被擦除），却会让全新克隆的 `npm ci`
+  因无法解析已停更 peer 而直接失败。
+- `devDependencies` 的 `@deepseek-ai/dsh-llm` / `dsh-timeout` / `dsh-settings` 由
+  `^0.1.7-rc.1` 收紧为精确 `0.1.7-rc.2`：DSH 预发布包内部使用**精确 peer**，
+  rc.1 与 rc.2 混装会触发 `ERESOLVE` 冲突。现在可 `npm ci && npm test`（无需
+  `--legacy-peer-deps`）。
+- `scripts/build-client.mjs` 移除硬编码开发机回退路径
+  （`E:/MyProjectCollection/Plugins/dsh-subagents-options/package.json`），改为在
+  缺少 `rolldown` 时抛出可操作的错误提示。
+- `package-lock.json` 重新生成（`resolved` 全部指向 `registry.npmjs.org`）。
+
 ## [0.5.3] - 2026-09-25
 
 ### 兼容：适配 DSH 0.1.7-rc.2
