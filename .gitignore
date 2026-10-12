@@ -18,3 +18,8 @@ session-parsed-summary.md
 Thumbs.db
 .idea/
 .vscode/
+
+# 开发过程文档（本地保留，不入库）
+docs/design.md
+docs/requirements.md
+docs/research-notes.md
