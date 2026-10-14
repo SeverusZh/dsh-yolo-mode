@@ -1,21 +1,27 @@
-# dsh-yolo-mode
+<div align="center">
 
-> DeepSeek Harness 插件：用大模型自动裁决沙箱**升权申请**（LLM-powered auto-approval）。
+# ⚡ dsh-yolo-mode
 
-当会话处于可写沙箱模式、审批策略为 `ask` 时，`dsh-yolo-mode` 拦截 `escalate sandbox to ...` 升权申请，按你选择的**预设**或**自定义权限层级**由大模型裁决「放行 / 拒绝 / 转人工」。任何不确定或失败路径都不会放行（**fail-closed**）。
+**DeepSeek Harness 插件：用大模型自动裁决沙箱升权申请**
 
-[![npm version](https://img.shields.io/npm/v/dsh-yolo-mode)](https://www.npmjs.com/package/dsh-yolo-mode)
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![DeepSeek Harness](https://img.shields.io/badge/DSH%200.1.5--rc.1%20%2F%20rc.2%20%2F%200.1.6--alpha.2%20%2F%200.1.7--rc.1%20%2F%20rc.2%20%2F%200.2.0--rc.1-blue)](https://github.com/deepseek-ai/deepseek-harness)
+[![npm version](https://img.shields.io/npm/v/dsh-yolo-mode?style=flat-square&logo=npm)](https://www.npmjs.com/package/dsh-yolo-mode)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-yolo-mode?style=flat-square&logo=npm)](https://www.npmjs.com/package/dsh-yolo-mode)
+[![license](https://img.shields.io/npm/l/dsh-yolo-mode?style=flat-square)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js)](package.json)
+[![GitHub release](https://img.shields.io/github/v/release/SeverusZh/dsh-yolo-mode?style=flat-square&logo=github)](https://github.com/SeverusZh/dsh-yolo-mode/releases)
+[![GitHub stars](https://img.shields.io/github/stars/SeverusZh/dsh-yolo-mode?style=flat-square&logo=github)](https://github.com/SeverusZh/dsh-yolo-mode)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.7--rc.1-blue?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
+
+</div>
 
 > **维护状态**：官方已在 DSH 中提供实验性 Auto review 能力（`@deepseek-ai/dsh-experimental-auto-review`，LLM 逐工具授权审查，在 `ask` 审批策略下替代人工审批），与本插件的「LLM 裁判自动审批」功能重叠。因此本插件**可能在未来停止维护**；如需官方原生的自动审批，可评估该实验性功能。当前版本仍会跟进 DSH 兼容（最近实测 **0.2.0-rc.1**）。
 
-> **兼容性**：v0.6.3 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），已在 **0.1.5-rc.1 / 0.1.5-rc.2 / 0.1.6-alpha.2 / 0.1.7-rc.1 / 0.1.7-rc.2 / 0.2.0-rc.1** 实测（真实-Cordis 探针通过；设置子系统已迁移至 0.1.7 的 `SettingsForms`——插件 Config schema + volatile 热更 + 自建设置页；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载）。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+当会话处于可写沙箱模式、审批策略为 `ask` 时，`dsh-yolo-mode` 拦截 `escalate sandbox to ...` 升权申请，按你选择的**预设**或**自定义权限层级**由大模型裁决「放行 / 拒绝 / 转人工」。任何不确定或失败路径都不会放行（**fail-closed**）。
 
 ---
 
-## 功能特性
+## ✨ 功能特性 / Features
 
 - **LLM 自动裁决**：在 `workspace-write` 会话中，对 `danger-full-access` / `workspace-write` 升权申请调用大模型分级（`allow / deny / unsure`），确定时免去人工弹窗。
 - **内置预设**：`off` / `strict` / `balanced`（默认）/ `permissive` / `yolo` / `custom`，覆盖从「全部转人工」到「确定性全放行」的完整光谱。
@@ -25,7 +31,7 @@
 - **完整审计**：每次裁决落 JSONL 日志，含工具、目标模式、当前模式、理由、决策与结果；状态弹窗一键「打开日志」用系统默认应用查看。
 - **fail-closed**：超时、非法输出、模型不可用、并发溢出等一切异常路径都回退为「拒绝」或「转人工」。
 
-## 安装
+## 📦 安装 / Install
 
 ### 1. 安装插件包
 
@@ -66,7 +72,7 @@ dsh plugin --profile web add <项目绝对路径>
   node_modules），否则 `@deepseek-ai/*` peer 依赖会因 Node 按真实路径解析而报
   `ERR_MODULE_NOT_FOUND`。
 
-## 配置
+## ⚙️ 配置 / Configuration
 
 插件行 `config` 全字段可选，未填按默认值：
 
@@ -101,7 +107,7 @@ levels:
 
 策略取值 `allow | judge | delegate | deny`；优先级：`levels.tools[toolName]` → 基础行（`custom` 时为 `levels[targetMode]`，其余预设为内置表）。
 
-## 预设
+## 🎯 预设 / Presets
 
 | 预设 | `workspace-write` | `danger-full-access` | 失败回退 | 不确定回退 | 说明 |
 |---|---|---|---|---|---|
@@ -122,13 +128,13 @@ levels:
 | `permissive` | 宽松：理由合理且范围可接受即倾向允许，仅明显破坏性 / 供应链风险拒绝 |
 | `custom` | 按 `levels` 层级表裁决，存疑按 `levels.error` / `levels.unsure` 回退 |
 
-## 界面
+## 🖥️ 界面 / UI
 
 - **输入栏 chip**：显示 `YOLO <preset>`，点击弹出统计面板（总审批 / 放行 / 拒绝 / 转人工 + 最近决策表，每页 5 条，带上一页 / 下一页翻页）。
 - **打开日志**：弹窗右上「打开日志」按钮用系统默认应用打开审计 JSONL（`auditFile` 配置或默认 `%TEMP%/dsh-yolo/judge.log`）；文件尚不存在时提示暂无记录。
 - **设置页**：「YOLO 审批」页在线修改预设、生效沙箱模式、裁判模型（provider / model 下拉，取自 Harness 模型配置）、层级表（JSON）；切换预设时自动预填充该预设的默认提示词与层级表。
 
-## 安全
+## 🔒 安全 / Security
 
 - **fail-closed**：只有明确得到 `allow` 才返回一次性 `allowed-once`；其余一切路径拒绝或转人工。
 - **防回环**：裁判 prompt 与 agent 上下文隔离，防止模型借 Web 审批回环自批准 `danger-full-access`。
@@ -137,13 +143,30 @@ levels:
 - **审计**：每次裁决落一行 JSONL，含 `{time, sessionId, origin, toolName, callId?, targetMode, currentMode, justification, decision, outcome, reason?, error?}`。`error` 仅在**裁判失败**时出现（值为 `JudgeError` 错误码，如 `BAD_OUTPUT` / `TIMEOUT` / `STREAM_ERROR` / `NO_ADAPTER`）；`outcome:"delegate"` 且有 `error`＝裁判失败转人工，无 `error`＝裁判主动转人工，二者可区分。
 - **失败可见**：statusView 载荷携带 `judgeErrors: { count, lastError?, lastErrorTime? }`（累计裁判失败次数与最近一次错误码），裁判异常不再只停留在 `logger.warn`。
 
-## 开发
+## 🧩 兼容性 / Compatibility
+
+`peerDependencies` 中的 `@deepseek-ai/dsh*` 范围决定插件能否被 DSH 的兼容门禁放行。本插件声明 **`>=0.1.7-rc.1`**（无上限），并已实测：
+
+| DSH 版本 | 状态 |
+| --- | --- |
+| 0.1.5-rc.1 | ✅ 实测通过 |
+| 0.1.5-rc.2 | ✅ 实测通过 |
+| 0.1.6-alpha.2 | ✅ 实测通过 |
+| 0.1.7-rc.1 | ✅ 实测通过 |
+| 0.1.7-rc.2 | ✅ 实测通过 |
+| 0.2.0-rc.1 | ✅ 实测通过 |
+
+> 只列出**实际跑过**的版本；未实测的不列。
+
+v0.6.3 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+
+## 🛠️ 开发 / Develop
 
 ```bash
 npm test        # node --test 全量测试
 npm run build   # 构建客户端 bundle（rolldown）
 ```
 
-## 许可
+## 📄 许可证 / License
 
 [MIT](LICENSE)
