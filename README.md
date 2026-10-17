@@ -10,12 +10,12 @@
 [![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js)](package.json)
 [![GitHub release](https://img.shields.io/github/v/release/SeverusZh/dsh-yolo-mode?style=flat-square&logo=github)](https://github.com/SeverusZh/dsh-yolo-mode/releases)
 [![GitHub stars](https://img.shields.io/github/stars/SeverusZh/dsh-yolo-mode?style=flat-square&logo=github)](https://github.com/SeverusZh/dsh-yolo-mode)
-[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.7--rc.1-blue?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+[![DSH](https://img.shields.io/badge/DSH-0.1.7--rc.1%20%2F%200.2.1--rc.1-blue?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 </div>
 
-> **维护状态**：官方已在 DSH 中提供实验性 Auto review 能力（`@deepseek-ai/dsh-experimental-auto-review`，LLM 逐工具授权审查，在 `ask` 审批策略下替代人工审批），与本插件的「LLM 裁判自动审批」功能重叠。因此本插件**可能在未来停止维护**；如需官方原生的自动审批，可评估该实验性功能。当前版本仍会跟进 DSH 兼容（最近实测 **0.2.0-rc.1**）。
+> **维护状态**：官方已在 DSH 中提供实验性 Auto review 能力（`@deepseek-ai/dsh-experimental-auto-review`，LLM 逐工具授权审查，在 `ask` 审批策略下替代人工审批），与本插件的「LLM 裁判自动审批」功能重叠。因此本插件**可能在未来停止维护**；如需官方原生的自动审批，可评估该实验性功能。当前版本仍会跟进 DSH 兼容（最近实测 **0.2.1-rc.2**）。
 
 当会话处于可写沙箱模式、审批策略为 `ask` 时，`dsh-yolo-mode` 拦截 `escalate sandbox to ...` 升权申请，按你选择的**预设**或**自定义权限层级**由大模型裁决「放行 / 拒绝 / 转人工」。任何不确定或失败路径都不会放行（**fail-closed**）。
 
@@ -145,7 +145,7 @@ levels:
 
 ## 🧩 兼容性 / Compatibility
 
-`peerDependencies` 中的 `@deepseek-ai/dsh*` 范围决定插件能否被 DSH 的兼容门禁放行。本插件声明 **`>=0.1.7-rc.1`**（无上限），并已实测：
+DSH 0.2.1 起兼容门禁优先读取 `engines.dsh`。本插件声明 **`engines.dsh: ">=0.1.7-rc.1"`**（无上限），dsh peer 保持 `>=0.1.7-rc.1`，并已核对：
 
 | DSH 版本 | 状态 |
 | --- | --- |
@@ -155,10 +155,12 @@ levels:
 | 0.1.7-rc.1 | ✅ 实测通过 |
 | 0.1.7-rc.2 | ✅ 实测通过 |
 | 0.2.0-rc.1 | ✅ 实测通过 |
+| 0.2.1-rc.1 | ✅ 兼容门禁 + 141 项测试 + 构建 |
+| 0.2.1-rc.2 | ✅ 兼容门禁通过 |
 
 > 只列出**实际跑过**的版本；未实测的不列。
 
-v0.6.3 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+v0.6.4 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载；0.2.1-rc.1 上通过兼容门禁、141 项测试与 client 构建，0.2.1-rc.2 门禁通过。0.2.1 的 `remote.llm` / `remote.session` 目录接口仍然存在。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
 
 ## 🛠️ 开发 / Develop
 
