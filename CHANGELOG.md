@@ -2,6 +2,16 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.6.5] - 2026-10-17
+
+### 修复
+
+- **0.6.4 的 npm 发布落入 registry 的 staged-publish 窗口**（npm/cli#9889）：
+  `npm publish` 返回成功，但版本只被 stage、未提交，`dist-tags.latest` 仍为 0.6.3；
+  重试同一版本返回 `409 Cannot publish over previously staged version`，且
+  `npm stage list` 无 stage-id 可清理。按上游建议将版本提升到 **0.6.5** 重新发布。
+  0.6.4 不会出现在 npm 上，功能内容与 0.6.4 相同。
+
 ## [0.6.4] - 2026-10-17
 
 ### 兼容性
