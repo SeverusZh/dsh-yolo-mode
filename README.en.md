@@ -10,12 +10,12 @@
 [![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js)](package.json)
 [![GitHub release](https://img.shields.io/github/v/release/SeverusZh/dsh-yolo-mode?style=flat-square&logo=github)](https://github.com/SeverusZh/dsh-yolo-mode/releases)
 [![GitHub stars](https://img.shields.io/github/stars/SeverusZh/dsh-yolo-mode?style=flat-square&logo=github)](https://github.com/SeverusZh/dsh-yolo-mode)
-[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.7--rc.1-blue?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+[![DSH](https://img.shields.io/badge/DSH-0.1.7--rc.1%20%2F%200.2.1--rc.1-blue?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 </div>
 
-> **Maintenance status**: DSH now ships an experimental Auto review capability (`@deepseek-ai/dsh-experimental-auto-review` — per-tool LLM authorization review that replaces manual approval under the `ask` approval policy), which overlaps with this plugin's "LLM-judge auto-approval". As a result this plugin **may stop being maintained in the future**; if you want the official native auto-approval, evaluate that experimental feature. The current version still tracks DSH compatibility (most recently tested on **0.2.0-rc.1**).
+> **Maintenance status**: DSH now ships an experimental Auto review capability (`@deepseek-ai/dsh-experimental-auto-review` — per-tool LLM authorization review that replaces manual approval under the `ask` approval policy), which overlaps with this plugin's "LLM-judge auto-approval". As a result this plugin **may stop being maintained in the future**; if you want the official native auto-approval, evaluate that experimental feature. The current version still tracks DSH compatibility (most recently tested on **0.2.1-rc.2**).
 
 When a session is in a writable sandbox mode and the approval policy is `ask`, `dsh-yolo-mode` intercepts `escalate sandbox to ...` requests and, according to the **preset** you choose or a **custom permission hierarchy**, has an LLM adjudicate "allow / deny / delegate". Any uncertain or failed path never allows escalation (**fail-closed**).
 
@@ -148,7 +148,7 @@ Default judge prompt per preset (used automatically when `judge.systemPrompt` is
 
 ## 🧩 兼容性 / Compatibility
 
-The `@deepseek-ai/dsh*` range in `peerDependencies` determines whether the plugin passes DSH's compatibility gate. This plugin declares **`>=0.1.7-rc.1`** (no upper bound), and has been tested on:
+Since DSH 0.2.1 the compatibility gate prefers `engines.dsh`. This plugin declares **`engines.dsh: ">=0.1.7-rc.1"`** (no upper bound), keeps the dsh peers at `>=0.1.7-rc.1`, and has been checked on:
 
 | DSH version | Status |
 | --- | --- |
@@ -158,10 +158,12 @@ The `@deepseek-ai/dsh*` range in `peerDependencies` determines whether the plugi
 | 0.1.7-rc.1 | ✅ Tested |
 | 0.1.7-rc.2 | ✅ Tested |
 | 0.2.0-rc.1 | ✅ Tested |
+| 0.2.1-rc.1 | ✅ Gate + 141 tests + build |
+| 0.2.1-rc.2 | ✅ Gate |
 
 > Only versions that were **actually run** are listed; untested versions are omitted.
 
-v0.6.3 supports DSH **0.1.5-rc.1+** (the `@deepseek-ai/dsh-*` peer was relaxed to `>=0.1.7-rc.1`); all of the versions above passed a real-Cordis probe: the settings subsystem was migrated to 0.1.7's `SettingsForms` (plugin Config schema + volatile hot-reload + a self-built settings page); on 0.1.7-rc.2 the provider/model directory is read via the client's `remote.llm` + `remote.session`; on 0.2.0-rc.1 it passes the new compatibility gate and loads normally. For older DSH (0.1.0-rc.6 / rc.8), use the last compatible npm version, **0.4.1**.
+v0.6.4 supports DSH **0.1.5-rc.1+** (the `@deepseek-ai/dsh-*` peer was relaxed to `>=0.1.7-rc.1`); all of the versions above passed a real-Cordis probe: the settings subsystem was migrated to 0.1.7's `SettingsForms` (plugin Config schema + volatile hot-reload + a self-built settings page); on 0.1.7-rc.2 the provider/model directory is read via the client's `remote.llm` + `remote.session`; on 0.2.0-rc.1 it passes the new compatibility gate and loads normally; 0.2.1-rc.1 passes the gate, 141 tests and the client build, and 0.2.1-rc.2 passes the gate. The 0.2.1 `remote.llm` / `remote.session` directory APIs remain present. For older DSH (0.1.0-rc.6 / rc.8), use the last compatible npm version, **0.4.1**.
 
 ## 🛠️ 开发 / Develop
 

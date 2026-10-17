@@ -2,6 +2,20 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [0.6.4] - 2026-10-17
+
+### 兼容性
+
+- **适配 DSH 0.2.1-rc.1 / rc.2**：新增 `engines.dsh: ">=0.1.7-rc.1"`（0.2.1 起
+  兼容门禁优先读取该字段），`dsh.compatibility.dshReleases` 新增
+  `"0.2.1-rc.1"` / `"0.2.1-rc.2": "compatible"`。devDependencies 的
+  `dsh-llm` / `dsh-timeout` / `dsh-settings` 提升到 `0.2.1-rc.1` 并按该依赖集
+  重新构建 client。
+- **验证**：`npm test` 141/141、`npm run build` 通过；0.2.1-rc.1 与已安装的
+  0.2.1-rc.2 均通过 `evaluatePluginCompatibility()` 门禁。插件使用的
+  `remote.llm.listProviders` / `remote.session.modelCatalog` 在 0.2.1 中仍存在，
+  无需改动运行时代码。
+
 ## [0.6.3] - 2026-09-29
 
 ### 兼容性
