@@ -163,7 +163,7 @@ Since DSH 0.2.1 the compatibility gate prefers `engines.dsh`. This plugin declar
 
 > Only versions that were **actually run** are listed; untested versions are omitted.
 
-v0.6.4 supports DSH **0.1.5-rc.1+** (the `@deepseek-ai/dsh-*` peer was relaxed to `>=0.1.7-rc.1`); all of the versions above passed a real-Cordis probe: the settings subsystem was migrated to 0.1.7's `SettingsForms` (plugin Config schema + volatile hot-reload + a self-built settings page); on 0.1.7-rc.2 the provider/model directory is read via the client's `remote.llm` + `remote.session`; on 0.2.0-rc.1 it passes the new compatibility gate and loads normally; 0.2.1-rc.1 passes the gate, 141 tests and the client build, and 0.2.1-rc.2 passes the gate. The 0.2.1 `remote.llm` / `remote.session` directory APIs remain present. For older DSH (0.1.0-rc.6 / rc.8), use the last compatible npm version, **0.4.1**.
+v0.6.5 supports DSH **0.1.5-rc.1+** (the `@deepseek-ai/dsh-*` peer was relaxed to `>=0.1.7-rc.1`); all of the versions above passed a real-Cordis probe: the settings subsystem was migrated to 0.1.7's `SettingsForms` (plugin Config schema + volatile hot-reload + a self-built settings page); on 0.1.7-rc.2 the provider/model directory is read via the client's `remote.llm` + `remote.session`; on 0.2.0-rc.1 it passes the new compatibility gate and loads normally; 0.2.1-rc.1 passes the gate, 141 tests and the client build, and 0.2.1-rc.2 passes the gate. The 0.2.1 `remote.llm` / `remote.session` directory APIs remain present. For older DSH (0.1.0-rc.6 / rc.8), use the last compatible npm version, **0.4.1**.
 
 ## 🛠️ 开发 / Develop
 

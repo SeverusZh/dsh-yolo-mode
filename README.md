@@ -160,7 +160,7 @@ DSH 0.2.1 起兼容门禁优先读取 `engines.dsh`。本插件声明 **`engines
 
 > 只列出**实际跑过**的版本；未实测的不列。
 
-v0.6.4 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载；0.2.1-rc.1 上通过兼容门禁、141 项测试与 client 构建，0.2.1-rc.2 门禁通过。0.2.1 的 `remote.llm` / `remote.session` 目录接口仍然存在。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+v0.6.5 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载；0.2.1-rc.1 上通过兼容门禁、141 项测试与 client 构建，0.2.1-rc.2 门禁通过。0.2.1 的 `remote.llm` / `remote.session` 目录接口仍然存在。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
 
 ## 🛠️ 开发 / Develop
 
