@@ -137,6 +137,14 @@ Default judge prompt per preset (used automatically when `judge.systemPrompt` is
 - **Open log**: the "Open log" button in the top-right of the dialog opens the audit JSONL (the `auditFile` config or the default `%TEMP%/dsh-yolo/judge.log`) in the system default application; if the file does not exist yet it reports that there are no records.
 - **Configuration page**: the plugin detail page lets you edit the preset, effective sandbox modes, judge model (provider / model dropdowns, taken from the Harness model configuration) and hierarchy table (JSON) online; switching the preset auto-fills that preset's default prompt and hierarchy table, and saving takes effect immediately with success / failure feedback.
 
+## 🖼️ 界面预览 / Screenshots
+
+The screenshots below come from a throwaway local preview instance; the example data is for demonstration only:
+
+![Plugin configuration page](docs/assets/screenshots/config-page.png)
+
+![Decision statistics popup](docs/assets/screenshots/stats-popup.png)
+
 ## 🔒 安全 / Security
 
 - **fail-closed**: only an explicit `allow` returns a one-shot `allowed-once`; every other path denies or delegates.

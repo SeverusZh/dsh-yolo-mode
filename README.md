@@ -134,6 +134,14 @@ levels:
 - **打开日志**：弹窗右上「打开日志」按钮用系统默认应用打开审计 JSONL（`auditFile` 配置或默认 `%TEMP%/dsh-yolo/judge.log`）；文件尚不存在时提示暂无记录。
 - **配置页**：插件详情页在线修改预设、生效沙箱模式、裁判模型（provider / model 下拉，取自 Harness 模型配置）、层级表（JSON）；切换预设时自动预填充该预设的默认提示词与层级表；保存后立即生效并给出成功 / 失败反馈。
 
+## 🖼️ 界面预览 / Screenshots
+
+以下截图来自本地一次性预览实例，示例数据仅用于演示：
+
+![插件配置页](docs/assets/screenshots/config-page.png)
+
+![决策统计浮层](docs/assets/screenshots/stats-popup.png)
+
 ## 🔒 安全 / Security
 
 - **fail-closed**：只有明确得到 `allow` 才返回一次性 `allowed-once`；其余一切路径拒绝或转人工。
