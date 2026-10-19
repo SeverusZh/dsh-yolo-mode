@@ -2,7 +2,22 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [0.6.5] - 2026-10-17
+## 0.6.6 - 2026-10-19
+
+### 新增
+
+- **客户端界面按 DSH 官方设计语言重做**：插件配置页改为「标题 + 说明 + 卡片分区 + 底部操作」结构，会话状态 chip 与决策统计浮层同步改版；统一 `--dsw-*` 主题 token、11/12/13/14/16 字号阶梯、4/6/8/12/16 间距与 8–12 圆角，亮暗主题均自适应。
+- 配置页补齐加载态与错误重试，保存成功 / 失败反馈、只读预设层级表与 JSON 层级表分区更清晰。
+
+### 修复
+
+- 移除客户端界面中的硬编码颜色与自定义阴影，改用主题 token 与官方阴影 token；暗色主题下不再出现浅色底、低对比文字。
+
+### 文档
+
+- README 与贡献指南标题规范化，版本引用同步至 0.6.6，界面说明改为插件详情页配置入口。
+
+## 0.6.5 - 2026-10-17
 
 ### 修复
 
@@ -12,7 +27,7 @@
   `npm stage list` 无 stage-id 可清理。按上游建议将版本提升到 **0.6.5** 重新发布。
   0.6.4 不会出现在 npm 上，功能内容与 0.6.4 相同。
 
-## [0.6.4] - 2026-10-17
+## 0.6.4 - 2026-10-17
 
 ### 兼容性
 
@@ -26,7 +41,7 @@
   `remote.llm.listProviders` / `remote.session.modelCatalog` 在 0.2.1 中仍存在，
   无需改动运行时代码。
 
-## [0.6.3] - 2026-09-29
+## 0.6.3 - 2026-09-29
 
 ### 兼容性
 
@@ -40,7 +55,7 @@
   兼容矩阵 `dsh.compatibility.dshReleases` 新增 `"0.2.0-rc.1": "compatible"`，
   README 徽章与兼容性声明同步更新。
 
-## [0.6.2] - 2026-09-27
+## 0.6.2 - 2026-09-27
 
 ### 修复：插件详情页的配置卡在引言、表单永不出现
 
@@ -73,9 +88,9 @@ Uncaught (in promise) Error: cannot get property "remote.session" without inject
   `remote.llm` 属性读取抛错时目录降级且 `status` 仍 `ready`；桥 reject 时 `status='error'`
   且带原始原因。
 
-## [0.6.1] - 2026-09-27
+## 0.6.1 - 2026-09-27
 
-### 修复：配置位置改到插件详情页（0.6.0 放错了地方）
+### 修复：配置位置改到插件详情页
 
 0.6.0 把配置放进了输入框旁的 `YOLO <预设>` 胶囊浮层（`shell.overlay`）——那是**状态与日志**
 的位置，不是「插件的配置面板」。本次改用 DSH 插件管理页声明的专用槽位：
@@ -92,9 +107,9 @@ Uncaught (in promise) Error: cannot get property "remote.session" without inject
   点胶囊仍是原来的统计卡 + 裁决表分页 + 打开日志 + 刷新。
 - 文案 `tabConfig` / `tabStatus` 退役（不再有标签页）；`settings.section` 保持退役。
 
-## [0.6.0] - 2026-09-27
+## 0.6.0 - 2026-09-27
 
-### 变更：全部配置移入插件自身 UI 面板（设置页退役）
+### 变更：全部配置移入插件自身 UI 面板
 
 - **移除 `settings.section` 注册**（原 id `yolo-mode`，order 25）：不再向 DSH 设置面板
   注册任何页面，全部配置项改由插件自身的 UI 面板承载 —— 点击输入框左侧的
@@ -122,7 +137,7 @@ Uncaught (in promise) Error: cannot get property "remote.session" without inject
   缺少 `rolldown` 时抛出可操作的错误提示。
 - `package-lock.json` 重新生成（`resolved` 全部指向 `registry.npmjs.org`）。
 
-## [0.5.3] - 2026-09-25
+## 0.5.3 - 2026-09-25
 
 ### 兼容：适配 DSH 0.1.7-rc.2
 
@@ -165,7 +180,7 @@ Uncaught (in promise) Error: cannot get property "remote.session" without inject
 - 测试版 `0.5.2-beta.0`（`--tag beta`）的内容——设置子系统迁移至 DSH 0.1.7 的
   `SettingsForms`——随本版一并正式发布，详见下方 `0.5.2` 条目。
 
-## [0.5.2] - 2026-09-24
+## 0.5.2 - 2026-09-24
 
 ### 兼容：设置子系统迁移至 DSH 0.1.7-rc.1 的 `SettingsForms`
 
@@ -204,9 +219,9 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
   （loader `_commitVolatile` 的同一原语）验证 volatile 就地更新后裁决即时生效。
 - 其余测试文件保持通过；`npm test` 132 项全绿。
 
-## [0.5.1] - 2026-09-22
+## 0.5.1 - 2026-09-22
 
-### 修复：裁判对推理型模型恒失败（Issue #1）
+### 修复：裁判对推理型模型恒失败
 
 - **默认 `judge.maxTokens` 256 → 4096**（`lib/policy.js` 默认配置与 `normalizeConfig`
   合并值、`lib/judge.js` 兜底值同步）。根因：推理型裁判模型把 token 预算全部消耗在
@@ -239,7 +254,7 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
   `compatible`（三版本已在本机真实装载运行，插件正常加载、零错误）；`node` 范围
   `>=20`，与 `engines.node` 一致。未实测的版本不声明（扫描时按 `unknown` 处理）。
 
-## [0.5.0] - 2026-09-04
+## 0.5.0 - 2026-09-04
 
 ### 兼容：DSH 0.1.2-alpha.4
 
@@ -265,7 +280,7 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
   `dsh-timeout` / `dsh-settings`（alpha.4）、`@deepseek-ai/schemastery`，
   供 `npm test`（`node --test`）直接运行。
 
-## [0.5.0] - 2026-08-28
+## 0.5.0 - 2026-08-28
 
 ### 新增
 
@@ -280,7 +295,7 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
 - `test/remote-bridge.test.mjs` 增 `openLogFile` 端点用例：文件存在 → 注入 openFile 收到解析路径；不存在 → `log-not-found` 且不调用 openFile；端点常量。
 - `test/client.test.mjs` 增 `YoloStore.openLogFile` 转发用例与 Popup 分页渲染用例（20 条 → 5 条/页、翻页器、打开日志按钮与成功提示）。
 
-## [0.4.0] - 2026-08-14
+## 0.4.0 - 2026-08-14
 
 ### 新增
 
@@ -288,9 +303,9 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
 - **每预设默认裁判提示词**：`defaultJudgePromptFor(preset)` 为六预设提供默认裁判提示词（strict 最保守、balanced 通用、permissive 宽松、custom 按层级表），`judge.systemPrompt` 留空时自动选用。
 - **预设预填充**：切换预设时自动把该预设的默认提示词与层级表填入 `systemPrompt` / `levels`（选 `custom` 留空）；`statusView` 返回 `presetDefaults`。
 
-## [0.3.0] - 2026-08-14
+## 0.3.0 - 2026-08-14
 
-### 变更（UI 重做，对齐 dsh-plugin-subagent-director 参考架构）
+### 变更：UI 重做对齐参考架构
 
 - **独立桥接条目**：新增 `./bridge` 入口（`lib/bridge-entry.js`，`inject: ['webServer','settings']`），自发布 `/yolo-mode` 前缀路由。修复 v0.2.0 根因——宿主 `webServer` 只能经 `inject` 取得，树外插件 `ctx.get('webServer')` 永远拿不到（参考项目已实测）。
 - **RPC 信封桥**：`/yolo-mode` 上实现 `settingsView` / `settingsMutate` / `statusView` 三端点，语义镜像 connection RPC 通道（loopback 围栏、乐观 revision 冲突、redacted 视图、路径 op）。
@@ -298,7 +313,7 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
 - **客户端 rolldown 构建**：`src/client/*.js` → `scripts/build-client.mjs`（rolldown，external react/@deepseek-ai）→ `lib/client/index.js`；客户端 `inject: ['slots','locale','connection','remote']`，locale 双语字典、`bindSnapshotSelector` 快照 store、`connection.rpc.call` 走桥、revision 冲突机。
 - **主条目 inject**：`export const inject = ['llm','settings']`（命名导出插件，非 default 函数）。
 
-## [0.2.0] - 2026-08-14
+## 0.2.0 - 2026-08-14
 
 ### 新增
 
@@ -319,7 +334,7 @@ DSH 0.1.7 移除了 `@deepseek-ai/dsh-settings` 的 `SettingsProvider.installSec
 
 - 已挂载插件行的**模块代码**更新需要重启 DSH 才能重新导入（patch 热重载只覆盖新行挂载与 config 变更）；v0.1.0 → v0.2.0 升级后请重启 DSH 并刷新浏览器。
 
-## [0.1.0] - 2026-08-14
+## 0.1.0 - 2026-08-14
 
 ### 新增
 

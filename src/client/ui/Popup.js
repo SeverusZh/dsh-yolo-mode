@@ -4,6 +4,10 @@
  * (paged, PAGE_SIZE per page, newest first), an "open audit log" button, and a
  * refresh button.
  *
+ * Presentation only: the panel, stat grid, table and controls are styled by the
+ * token stylesheet installed by the client entry (`styles.js`). All copy keys,
+ * click handlers, pagination semantics and the log-open flow are unchanged.
+ *
  * Guard/hook split mirrors ConfigForm: the outer component validates the
  * slot inject face, the inner component owns all hooks unconditionally.
  */
@@ -12,72 +16,23 @@ import { useState, useEffect, createElement as h } from 'react';
 /** Rows per page of the recent-decisions table. */
 const PAGE_SIZE = 5;
 
-const popupStyle = {
-  position: 'absolute',
-  top: 56,
-  right: 16,
-  width: 520,
-  maxWidth: '90vw',
-  maxHeight: '70vh',
-  overflow: 'auto',
-  backgroundColor: '#ffffff',
-  color: '#111827',
-  border: '1px solid #e5e7eb',
-  borderRadius: 12,
-  boxShadow: '0 12px 40px rgba(15,23,42,0.4)',
-  padding: 14,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-  zIndex: 1000,
-};
-
-const headerStyle = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-};
-
-const headerButtons = { display: 'flex', alignItems: 'center', gap: 8 };
-
-const statGrid = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 };
-
-const statCell = {
-  border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 6px',
-  textAlign: 'center', backgroundColor: '#f8fafc',
-};
-
-const statValue = { fontSize: 18, fontWeight: 600, color: '#111827' };
-const statLabel = { fontSize: 11, color: '#6b7280', marginTop: 2 };
-
-const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 12 };
-const thStyle = { color: '#374151', textAlign: 'left', padding: '4px 6px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f1f5f9', fontWeight: 500 };
-const tdStyle = { padding: '4px 6px', borderBottom: '1px solid #e5e7eb', verticalAlign: 'top' };
-const codeStyle = { fontFamily: 'monospace', fontSize: 11, color: '#374151' };
-
-const primaryButton = {
-  backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: 6,
-  padding: '5px 12px', fontSize: 12, cursor: 'pointer',
-};
-
-const secondaryButton = {
-  backgroundColor: '#ffffff', color: '#374151', border: '1px solid #cbd5e1',
-  borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer',
-};
-
-const pagerButton = {
-  backgroundColor: '#ffffff', color: '#2563eb', border: '1px solid #cbd5e1',
-  borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer',
-};
-
-const pagerButtonDisabled = { opacity: 0.4, cursor: 'not-allowed' };
-
-const captionStyle = { margin: 0, color: '#6b7280', fontSize: 11, lineHeight: '16px' };
-const logResultOk = { color: '#16a34a' };
-const logResultErr = { color: '#dc2626' };
-
 /** Truncate long reason text for display. */
 function truncate(text, max) {
   if (typeof text !== 'string') return '';
   return text.length > max ? text.slice(0, max) + '…' : text;
+}
+
+/**
+ * Semantic kind of a decision outcome, used only to colour the outcome cell
+ * with state tokens. Unknown values stay neutral.
+ */
+function outcomeKind(value) {
+  const text = typeof value === 'string' ? value.toLowerCase() : '';
+  if (text === '') return undefined;
+  if (text.includes('allow')) return 'ok';
+  if (text.includes('reject') || text.includes('deny')) return 'err';
+  if (text.includes('delegat') || text.includes('unsure') || text.includes('error')) return 'warn';
+  return undefined;
 }
 
 /**
@@ -140,30 +95,40 @@ function ReactPopup({ store, useSnapshot, t }) {
     }
   };
 
-  return h('div', { style: popupStyle },
-    h('div', { style: headerStyle },
-      h('strong', {}, t('chip')),
-      h('div', { style: headerButtons },
+  return h('div', {
+    className: 'ym-popup',
+    role: 'dialog',
+    'aria-label': t('chip'),
+  },
+    h('div', { className: 'ym-popup-head' },
+      h('h3', { className: 'ym-popup-title' }, t('chip')),
+      h('div', { className: 'ym-popup-actions' },
         h('button', {
-          style: logBusy ? Object.assign({}, secondaryButton, { opacity: 0.6 }) : secondaryButton,
+          type: 'button',
+          className: 'ym-btn ym-btn-sm',
+          disabled: logBusy,
           onClick: () => void openLog(),
           title: auditFile !== undefined ? auditFile : undefined,
         }, logBusy ? t('openLogBusy') : t('openLog')),
-        h('button', { style: primaryButton, onClick: () => void store.load() }, t('refresh')),
+        h('button', {
+          type: 'button',
+          className: 'ym-btn ym-btn-sm ym-btn-primary',
+          onClick: () => void store.load(),
+        }, t('refresh')),
       ),
     ),
 
     // Open-log feedback line.
     logResult !== undefined
-      ? h('p', { style: Object.assign({}, captionStyle, logResult.ok ? logResultOk : logResultErr) },
+      ? h('p', { className: 'ym-caption ' + (logResult.ok ? 'ym-caption-ok' : 'ym-caption-err') },
           logResult.ok
             ? t('openLogOk') + (logResult.value && logResult.value.path ? ': ' + logResult.value.path : '')
             : logMessage(t, logResult.error))
       : auditFile !== undefined
-        ? h('p', { style: captionStyle }, t('logPath') + ': ' + auditFile)
+        ? h('p', { className: 'ym-caption' }, t('logPath') + ': ' + auditFile)
         : null,
 
-    h('div', { style: statGrid },
+    h('div', { className: 'ym-stats' },
       statCellOf(t, 'statsTotal', stats.total),
       statCellOf(t, 'statsAllowed', stats.allowed),
       statCellOf(t, 'statsRejected', stats.rejected),
@@ -171,42 +136,50 @@ function ReactPopup({ store, useSnapshot, t }) {
     ),
 
     recent.length === 0
-      ? h('p', { style: { color: '#6b7280', fontSize: 12, margin: 0 } }, t('recentEmpty'))
-      : h('table', { style: tableStyle },
-          h('thead', {},
-            h('tr', {},
-              h('th', { style: thStyle }, t('tableTime')),
-              h('th', { style: thStyle }, t('tableTool')),
-              h('th', { style: thStyle }, t('tableTarget')),
-              h('th', { style: thStyle }, t('tableDecision')),
-              h('th', { style: thStyle }, t('tableOutcome')),
-              h('th', { style: thStyle }, t('tableReason')),
-            )),
-          h('tbody', {},
-            pageRows.map((row, idx) => tableRow(t, row, safePage * PAGE_SIZE + idx)),
+      ? h('div', { className: 'ym-empty' }, t('recentEmpty'))
+      : h('div', { className: 'ym-table-wrap' },
+          h('table', { className: 'ym-table' },
+            h('thead', {},
+              h('tr', {},
+                h('th', {}, t('tableTime')),
+                h('th', {}, t('tableTool')),
+                h('th', {}, t('tableTarget')),
+                h('th', {}, t('tableDecision')),
+                h('th', {}, t('tableOutcome')),
+                h('th', {}, t('tableReason')),
+              )),
+            h('tbody', {},
+              pageRows.map((row, idx) => tableRow(t, row, safePage * PAGE_SIZE + idx)),
+            ),
           ),
         ),
 
     // Pager (hidden when everything fits on one page).
     totalPages > 1
-      ? h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 } },
+      ? h('div', { className: 'ym-pager' },
           h('button', {
-            style: Object.assign({}, pagerButton, safePage === 0 ? pagerButtonDisabled : {}),
+            type: 'button',
+            className: 'ym-btn ym-btn-sm',
             disabled: safePage === 0,
             onClick: () => setPage(safePage - 1),
           }, t('pagePrev')),
-          h('span', { style: { fontSize: 12, color: '#374151' } },
+          h('span', { className: 'ym-page-text' },
             t('pageOf', { current: String(safePage + 1), total: String(totalPages) })),
           h('button', {
-            style: Object.assign({}, pagerButton, safePage >= totalPages - 1 ? pagerButtonDisabled : {}),
+            type: 'button',
+            className: 'ym-btn ym-btn-sm',
             disabled: safePage >= totalPages - 1,
             onClick: () => setPage(safePage + 1),
           }, t('pageNext')),
         )
       : null,
 
-    h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
-      h('button', { style: primaryButton, onClick: () => store.togglePopup() }, t('close')),
+    h('div', { className: 'ym-popup-foot' },
+      h('button', {
+        type: 'button',
+        className: 'ym-btn ym-btn-sm',
+        onClick: () => store.togglePopup(),
+      }, t('close')),
     ),
   );
 }
@@ -223,21 +196,23 @@ function logMessage(t, error) {
 
 function statCellOf(t, key, value) {
   const text = value === undefined || value === null ? '–' : String(value);
-  return h('div', { style: statCell },
-    h('div', { style: statValue }, text),
-    h('div', { style: statLabel }, t(key)),
+  return h('div', { className: 'ym-stat' },
+    h('div', { className: 'ym-stat-value' }, text),
+    h('div', { className: 'ym-stat-label' }, t(key)),
   );
 }
 
 function tableRow(t, row, idx) {
+  const kind = outcomeKind(row.outcome);
   return h('tr', { key: idx },
-    h('td', { style: tdStyle }, timeText(row.time)),
-    h('td', { style: tdStyle }, row.toolName || '–'),
-    h('td', { style: tdStyle },
-      h('span', { style: codeStyle }, row.targetMode || '–')),
-    h('td', { style: tdStyle }, row.decision || '–'),
-    h('td', { style: tdStyle }, row.outcome || '–'),
-    h('td', { style: tdStyle }, truncate(row.reason, 48) || '–'),
+    h('td', { className: 'ym-time' }, timeText(row.time)),
+    h('td', {}, row.toolName || '–'),
+    h('td', {},
+      h('span', { className: 'ym-code' }, row.targetMode || '–')),
+    h('td', {}, row.decision || '–'),
+    h('td', {},
+      h('span', { className: 'ym-outcome', 'data-kind': kind }, row.outcome || '–')),
+    h('td', { className: 'ym-reason', title: truncate(row.reason, 48) || undefined }, truncate(row.reason, 48) || '–'),
   );
 }
 

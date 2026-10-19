@@ -27,7 +27,7 @@
 - **内置预设**：`off` / `strict` / `balanced`（默认）/ `permissive` / `yolo` / `custom`，覆盖从「全部转人工」到「确定性全放行」的完整光谱。
 - **自定义层级**：`levels` 支持逐目标模式、逐工具（`tools.<toolName>`）的 `allow / judge / delegate / deny` 策略，及 `error` / `unsure` 回退。
 - **每预设默认提示词**：`judge.systemPrompt` 留空时按预设自动选用对应裁判提示词（strict 最保守、permissive 宽松、custom 按层级表）。
-- **图形化配置**：设置面板「YOLO 审批」页在线修改预设 / 生效模式 / 裁判模型（下拉选择）/ 层级表，保存即生效；输入栏状态 chip + 决策统计面板。
+- **图形化配置**：插件详情页在线修改预设 / 生效模式 / 裁判模型（下拉选择）/ 层级表，保存即生效；输入栏状态 chip + 决策统计面板。
 - **完整审计**：每次裁决落 JSONL 日志，含工具、目标模式、当前模式、理由、决策与结果；状态弹窗一键「打开日志」用系统默认应用查看。
 - **fail-closed**：超时、非法输出、模型不可用、并发溢出等一切异常路径都回退为「拒绝」或「转人工」。
 
@@ -43,7 +43,7 @@ dsh plugin --profile web add dsh-yolo-mode
 dsh plugin --profile web add <项目绝对路径>
 ```
 
-### 2.（可选）覆盖插件配置
+### 2. 可选：覆盖插件配置
 
 `dsh plugin add` 会通过插件包自带的 `cordis.patch.yml` 自动挂载 `yolo-mode` 与
 `yolo-mode-bridge` 两个入口，**不需要**再手动 `insert`。需要调整配置时，在
@@ -92,7 +92,7 @@ dsh plugin --profile web add <项目绝对路径>
 
 > ⚠️ **推理型模型必须调大 `judge.maxTokens`**：若裁判模型会先输出一段内部推理（reasoning / chain-of-thought）再给出结论 JSON，则 token 预算会被推理内容消耗；预算过小时 `content` 为空、`finish_reason=length`，裁判以 `BAD_OUTPUT` 失败并回退为「转人工」（默认预设 `balanced` 下表现为**每次都弹人工审批**）。默认值已从 `256` 提升至 **`4096`**；若仍遇到回退，请继续调大（如 `8192`）。审计日志中此类失败会带 `error: "BAD_OUTPUT"`。
 
-### 权限层级（`levels`）
+### 权限层级 levels
 
 ```yaml
 levels:
@@ -132,7 +132,7 @@ levels:
 
 - **输入栏 chip**：显示 `YOLO <preset>`，点击弹出统计面板（总审批 / 放行 / 拒绝 / 转人工 + 最近决策表，每页 5 条，带上一页 / 下一页翻页）。
 - **打开日志**：弹窗右上「打开日志」按钮用系统默认应用打开审计 JSONL（`auditFile` 配置或默认 `%TEMP%/dsh-yolo/judge.log`）；文件尚不存在时提示暂无记录。
-- **设置页**：「YOLO 审批」页在线修改预设、生效沙箱模式、裁判模型（provider / model 下拉，取自 Harness 模型配置）、层级表（JSON）；切换预设时自动预填充该预设的默认提示词与层级表。
+- **配置页**：插件详情页在线修改预设、生效沙箱模式、裁判模型（provider / model 下拉，取自 Harness 模型配置）、层级表（JSON）；切换预设时自动预填充该预设的默认提示词与层级表；保存后立即生效并给出成功 / 失败反馈。
 
 ## 🔒 安全 / Security
 
@@ -160,7 +160,7 @@ DSH 0.2.1 起兼容门禁优先读取 `engines.dsh`。本插件声明 **`engines
 
 > 只列出**实际跑过**的版本；未实测的不列。
 
-v0.6.5 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载；0.2.1-rc.1 上通过兼容门禁、141 项测试与 client 构建，0.2.1-rc.2 门禁通过。0.2.1 的 `remote.llm` / `remote.session` 目录接口仍然存在。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
+v0.6.6 支持 DSH **0.1.5-rc.1+**（`@deepseek-ai/dsh-*` peer 放宽为 `>=0.1.7-rc.1`），上述版本均经真实-Cordis 探针通过：设置子系统已迁移至 0.1.7 的 `SettingsForms`（插件 Config schema + volatile 热更 + 自建设置页）；0.1.7-rc.2 上 provider/model 目录改由 client `remote.llm` + `remote.session` 读取；0.2.0-rc.1 上通过新的兼容性门禁并正常加载；0.2.1-rc.1 上通过兼容门禁、141 项测试与 client 构建，0.2.1-rc.2 门禁通过。0.2.1 的 `remote.llm` / `remote.session` 目录接口仍然存在。旧版 DSH（0.1.0-rc.6 / rc.8）请使用最后兼容的 npm 版本 **0.4.1**。
 
 ## 🛠️ 开发 / Develop
 

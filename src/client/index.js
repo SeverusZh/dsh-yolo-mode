@@ -18,6 +18,7 @@ import { YoloStore } from './store.js';
 import { ConfigForm } from './ui/ConfigForm.js';
 import { Chip } from './ui/Chip.js';
 import { Popup } from './ui/Popup.js';
+import { installStyles } from './ui/styles.js';
 import { bindSnapshotSelector } from './bind.js';
 
 /**
@@ -40,6 +41,10 @@ export const inject = ['slots', 'locale', 'connection', 'remote', 'remote.llm', 
  */
 export function apply(ctx) {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'yolo-mode: copy dictionaries');
+  // Presentation layer: the token stylesheet used by the config form, the chip
+  // and the overlay panel. Fiber-scoped and a no-op outside the browser (the
+  // client bundle is also evaluated in Node for tests).
+  ctx.effect(() => installStyles(), 'yolo-mode: styles');
 
   const connection = ctx.get('connection');
   // No connection transport → nothing to talk to; leave the slots unregistered.

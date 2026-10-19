@@ -27,7 +27,7 @@ When a session is in a writable sandbox mode and the approval policy is `ask`, `
 - **Built-in presets**: `off` / `strict` / `balanced` (default) / `permissive` / `yolo` / `custom`, spanning the full range from "delegate everything to a human" to "deterministically allow everything".
 - **Custom hierarchy**: `levels` supports per-target-mode and per-tool (`tools.<toolName>`) `allow / judge / delegate / deny` policies, plus `error` / `unsure` fallbacks.
 - **Per-preset default prompts**: when `judge.systemPrompt` is empty, the judge prompt for the preset is used automatically (strict is the most conservative, permissive is lenient, custom follows the hierarchy table).
-- **Graphical configuration**: the "YOLO approval" page in the settings panel lets you edit the preset / effective modes / judge model (dropdown) / hierarchy table online, effective on save; plus an input-bar status chip and a decision-statistics panel.
+- **Graphical configuration**: the plugin detail page lets you edit the preset / effective modes / judge model (dropdown) / hierarchy table online, effective on save; plus an input-bar status chip and a decision-statistics panel.
 - **Full audit trail**: every verdict is written to a JSONL log with tool, target mode, current mode, reason, decision and outcome; the status dialog has a one-click "Open log" that opens it in the system default application.
 - **fail-closed**: timeouts, invalid output, model unavailability, concurrency overflow and every other exceptional path fall back to "deny" or "delegate".
 
@@ -43,7 +43,7 @@ dsh plugin --profile web add dsh-yolo-mode
 dsh plugin --profile web add <absolute path to project>
 ```
 
-### 2. (Optional) Override the plugin configuration
+### 2. Optional: Override the plugin configuration
 
 `dsh plugin add` automatically mounts both the `yolo-mode` and `yolo-mode-bridge`
 entries via the `cordis.patch.yml` shipped with the package — you do **not** need to
@@ -95,7 +95,7 @@ All fields of the plugin line's `config` are optional; unset fields use their de
 
 > ⚠️ **Reasoning models must raise `judge.maxTokens`**: if the judge model emits an internal reasoning / chain-of-thought block before the final JSON verdict, the token budget is consumed by that reasoning; when the budget is too small, `content` is empty with `finish_reason=length`, the judge fails with `BAD_OUTPUT` and falls back to "delegate" (under the default `balanced` preset this shows up as **a manual approval prompt every time**). The default was raised from `256` to **`4096`**; if you still hit fallbacks, raise it further (e.g. `8192`). Such failures carry `error: "BAD_OUTPUT"` in the audit log.
 
-### Permission hierarchy (`levels`)
+### Permission hierarchy levels
 
 ```yaml
 levels:
@@ -135,7 +135,7 @@ Default judge prompt per preset (used automatically when `judge.systemPrompt` is
 
 - **Input-bar chip**: shows `YOLO <preset>`; clicking it opens a statistics panel (total approvals / allowed / denied / delegated + a recent-decisions table, 5 per page, with previous / next page navigation).
 - **Open log**: the "Open log" button in the top-right of the dialog opens the audit JSONL (the `auditFile` config or the default `%TEMP%/dsh-yolo/judge.log`) in the system default application; if the file does not exist yet it reports that there are no records.
-- **Settings page**: the "YOLO approval" page lets you edit the preset, effective sandbox modes, judge model (provider / model dropdowns, taken from the Harness model configuration) and hierarchy table (JSON) online; switching the preset auto-fills that preset's default prompt and hierarchy table.
+- **Configuration page**: the plugin detail page lets you edit the preset, effective sandbox modes, judge model (provider / model dropdowns, taken from the Harness model configuration) and hierarchy table (JSON) online; switching the preset auto-fills that preset's default prompt and hierarchy table, and saving takes effect immediately with success / failure feedback.
 
 ## 🔒 安全 / Security
 
@@ -163,7 +163,7 @@ Since DSH 0.2.1 the compatibility gate prefers `engines.dsh`. This plugin declar
 
 > Only versions that were **actually run** are listed; untested versions are omitted.
 
-v0.6.5 supports DSH **0.1.5-rc.1+** (the `@deepseek-ai/dsh-*` peer was relaxed to `>=0.1.7-rc.1`); all of the versions above passed a real-Cordis probe: the settings subsystem was migrated to 0.1.7's `SettingsForms` (plugin Config schema + volatile hot-reload + a self-built settings page); on 0.1.7-rc.2 the provider/model directory is read via the client's `remote.llm` + `remote.session`; on 0.2.0-rc.1 it passes the new compatibility gate and loads normally; 0.2.1-rc.1 passes the gate, 141 tests and the client build, and 0.2.1-rc.2 passes the gate. The 0.2.1 `remote.llm` / `remote.session` directory APIs remain present. For older DSH (0.1.0-rc.6 / rc.8), use the last compatible npm version, **0.4.1**.
+v0.6.6 supports DSH **0.1.5-rc.1+** (the `@deepseek-ai/dsh-*` peer was relaxed to `>=0.1.7-rc.1`); all of the versions above passed a real-Cordis probe: the settings subsystem was migrated to 0.1.7's `SettingsForms` (plugin Config schema + volatile hot-reload + a self-built settings page); on 0.1.7-rc.2 the provider/model directory is read via the client's `remote.llm` + `remote.session`; on 0.2.0-rc.1 it passes the new compatibility gate and loads normally; 0.2.1-rc.1 passes the gate, 141 tests and the client build, and 0.2.1-rc.2 passes the gate. The 0.2.1 `remote.llm` / `remote.session` directory APIs remain present. For older DSH (0.1.0-rc.6 / rc.8), use the last compatible npm version, **0.4.1**.
 
 ## 🛠️ 开发 / Develop
 

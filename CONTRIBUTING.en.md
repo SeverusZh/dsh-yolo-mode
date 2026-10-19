@@ -93,7 +93,7 @@ Widening this range is a **public commitment** and must be backed by real testin
 - Do not force-sync `main` and `dev-*` into each other — they carry different
   responsibilities, and one trailing the other is a normal state.
 
-## Release process (maintainer)
+## Release process for maintainers
 
 1. **Verify on the `dev-<DSH version>` branch**, then publish an **npm beta**:
    ```bash

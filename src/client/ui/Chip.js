@@ -1,29 +1,11 @@
 /**
  * YOLO mode status chip (slot `conversation.input.left`). Shows "YOLO <preset>"
  * and toggles the shared popup via store.togglePopup().
+ *
+ * Presentation only: the pill, the status dot colour and the focus/hover states
+ * come from the token stylesheet installed by the client entry (`styles.js`).
  */
 import { useEffect, createElement as h } from 'react';
-
-const chipStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '4px 10px',
-  borderRadius: 999,
-  backgroundColor: '#ffffff',
-  color: '#1d4ed8',
-  border: '1px solid #93c5fd',
-  fontSize: 12,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  userSelect: 'none',
-};
-
-/** Status colour for the leading dot based on judge readiness. */
-function dotColor(statusInfo) {
-  const configured = statusInfo && statusInfo.judgeConfigured;
-  return configured ? '#16a34a' : '#d97706';
-}
 
 /**
  * @param {object} props - slot-delivered { store, useSnapshot, t } (inject face).
@@ -45,15 +27,24 @@ function ChipLoaded({ store, useSnapshot }) {
   const state = useSnapshot((s) => s);
   const statusInfo = state.statusInfo;
   const preset = statusInfo && typeof statusInfo.preset === 'string' ? statusInfo.preset : '…';
+  // Judge readiness is the only state the dot carries: ready (green) versus
+  // not configured / unknown (amber). Both colours are state tokens; the dot
+  // itself is styled through `data-ready` / `data-pending`.
+  const ready = !!(statusInfo && statusInfo.judgeConfigured);
   return h('button', {
-    style: chipStyle,
+    type: 'button',
+    className: 'ym-chip',
     title: 'YOLO',
+    'aria-haspopup': 'dialog',
+    'aria-expanded': state.open === true,
     onClick: () => store.togglePopup(),
   },
-    h('span', { style: {
-      width: 8, height: 8, borderRadius: 4,
-      backgroundColor: dotColor(statusInfo), display: 'inline-block',
-    } }),
-    'YOLO ' + preset,
+    h('span', {
+      className: 'ym-chip-dot',
+      'data-ready': ready || undefined,
+      'data-pending': ready ? undefined : true,
+      'aria-hidden': true,
+    }),
+    h('span', { className: 'ym-chip-preset' }, 'YOLO ' + preset),
   );
 }

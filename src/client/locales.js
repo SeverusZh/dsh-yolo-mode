@@ -10,7 +10,9 @@ export const NS = 'settings.yoloMode';
 /** English dictionary. */
 export const en = {
   chip: 'YOLO status',
+  configTitle: 'YOLO configuration',
   sectionIntro: 'Configure how YOLO mode auto-judges sandbox escalation approval requests.',
+  loading: 'Loading…',
   loadError: 'Could not load YOLO mode settings.',
   conflict: 'The settings changed on the server. Reloading your edits — please review and retry.',
   rejected: 'The change was rejected by the settings provider.',
@@ -72,7 +74,9 @@ export const en = {
 /** Chinese dictionary. */
 export const zh = {
   chip: 'YOLO 状态',
+  configTitle: 'YOLO 配置',
   sectionIntro: '配置 YOLO 模式如何自动裁决沙箱升权审批申请。',
+  loading: '加载中…',
   loadError: '无法加载 YOLO 模式设置。',
   conflict: '服务端设置已变更。已重新加载你的编辑——请复核并重试。',
   rejected: '更改被设置提供方拒绝。',
