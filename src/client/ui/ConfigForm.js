@@ -263,8 +263,14 @@ function ReactSection({ store, useSnapshot, t, close }) {
         h('p', { className: 'ym-card-hint' }, t('presetHint')),
       ),
       h('div', { className: 'ym-field' },
-        h('label', { className: 'ym-sr-only' }, t('preset')),
+        h('label', {
+          className: 'ym-sr-only',
+          id: 'ym-preset-label',
+          htmlFor: 'ym-preset-select',
+        }, t('preset')),
         h('select', {
+          id: 'ym-preset-select',
+          'aria-labelledby': 'ym-preset-label',
           className: 'ym-select',
           value: draft.preset,
           onChange: (e) => changePreset(e.target.value),
